@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    package="kr.ac.inha.nsl">
+
+    <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+    <uses-permission android:name="com.samsung.accessory.permission.ACCESSORY_FRAMEWORK" />
+    <uses-permission android:name="com.samsung.android.providers.context.permission.WRITE_USE_APP_FEATURE_SURVEY" />
+    <uses-permission android:name="com.samsung.wmanager.ENABLE_NOTIFICATION" />
+    <uses-permission android:name="com.samsung.WATCH_APP_TYPE.Companion" />
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        tools:ignore="AllowBackup,GoogleAppIndexingWarning">
+        <activity
+            android:name=".MainActivity"
+            android:label="@string/app_name"
+            android:screenOrientation="portrait"
+            android:theme="@style/AppTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name=".ConfigScreen"
+            android:theme="@style/AppTheme" />
+        <activity
+            android:name=".DbViewActivity"
+            android:theme="@style/AppTheme" />
+
+        <meta-data
+            android:name="AccessoryServicesLocation"
+            android:value="/res/xml/accessoryservices.xml" />
+        <meta-data
+            android:name="GearAppType"
+            android:value="tpk" />
+
+        <service android:name=".ConsumerService" />
+
+        <receiver
+            android:name="com.samsung.android.sdk.accessory.RegisterUponInstallReceiver"
+            android:permission="vuala">
+            <intent-filter>
+                <action android:name="com.samsung.accessory.action.REGISTER_AGENT" />
+            </intent-filter>
+        </receiver>
+        <receiver
+            android:name="com.samsung.android.sdk.accessory.ServiceConnectionIndicationBroadcastReceiver"
+            android:permission="vuala">
+            <intent-filter>
+                <action android:name="com.samsung.accessory.action.SERVICE_CONNECTION_REQUESTED" />
+            </intent-filter>
+        </receiver>
+        <receiver
+            android:name=".MainActivity$ConsumerServiceReceiver"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="vuala" />
+    </application>
+
+</manifest>

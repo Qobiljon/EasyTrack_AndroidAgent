@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">EasyTrack Tizen Agent</string>
+    <string name="ConnectionEstablishedMsg">Connection established</string>
+    <string name="ConnectionTerminateddMsg">Connection terminated</string>
+    <string name="ConnectionAlreadyExist">Already connected</string>
+    <string name="ConnectionDoesNotExists">Connection doesn\'t exist</string>
+    <string name="ConnectionFailure">Connection failure occurred</string>
+    <string name="NoPeersFound">No peers found</string>
+    <string name="buttonConnect">Connect Device</string>
+    <string name="buttonDisconnect">Disconnect Device</string>
+    <string name="buttonSend">Send</string>
+    <string name="dummy">Dummy</string>
+    <string name="status">Status:</string>
+    <string name="configurations">Configurations</string>
+    <string name="view_database">View Database</string>
+    <string name="database">Database</string>
+    <string name="sensor_data">Sensor data will be displayed here…</string>
+    <string name="refresh_window">Refresh window</string>
+    <string name="disconnected">Disconnected</string>
+    <string name="connected">Connected</string>
+    <string name="clean_database">CLEAN DATABASE</string>
+</resources>
