@@ -94,16 +94,6 @@ public class MainActivity extends Activity {
         }
     }
 
-    public void configurationClick(View view) {
-        startActivity(new Intent(this, ConfigScreen.class));
-        overridePendingTransition(0, 0);
-    }
-
-    public void viewDatabaseClick(View view) {
-        startActivity(new Intent(this, DbViewActivity.class));
-        overridePendingTransition(0, 0);
-    }
-
     public class ConsumerServiceReceiver extends BroadcastReceiver {
         @Override
         public void onReceive(Context context, Intent intent) {

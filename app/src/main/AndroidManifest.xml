@@ -26,12 +26,6 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <activity
-            android:name=".ConfigScreen"
-            android:theme="@style/AppTheme" />
-        <activity
-            android:name=".DbViewActivity"
-            android:theme="@style/AppTheme" />
 
         <meta-data
             android:name="AccessoryServicesLocation"
