@@ -1,15 +1,215 @@
 package kr.ac.inha.nsl;
 
+import android.annotation.SuppressLint;
+import android.content.BroadcastReceiver;
+import android.content.ComponentName;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.ServiceConnection;
 import android.database.sqlite.SQLiteDatabase;
+import android.os.IBinder;
+import android.support.annotation.Nullable;
+import android.text.TextUtils;
+import android.util.Log;
+import android.view.View;
+import android.widget.Toast;
 
+import org.apache.http.HttpEntity;
+import org.apache.http.HttpResponse;
+import org.apache.http.NameValuePair;
+import org.apache.http.client.HttpClient;
+import org.apache.http.client.entity.EntityBuilder;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.entity.ContentType;
+import org.apache.http.entity.mime.HttpMultipartMode;
+import org.apache.http.entity.mime.MultipartEntityBuilder;
+import org.apache.http.entity.mime.content.FileBody;
+import org.apache.http.impl.client.DefaultHttpClient;
+import org.apache.http.message.BasicNameValuePair;
+
+import java.io.File;
+import java.io.FilenameFilter;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
+import java.util.Locale;
+import java.util.regex.Pattern;
 
 import static android.content.Context.MODE_PRIVATE;
 
-@SuppressWarnings("all")
+public class Tools {
+    // region Variables
+    static String APP_DIR;
+    private static SQLiteDatabase db;
+    // endregion
+
+    // region Constant values
+    static final short CHANNEL_ID = 104;
+    static final String API_REGISTER = "register";
+    static final String API_UNREGISTER = "unregister";
+    static final String API_AUTHENTICATE = "authenticate";
+    static final String API_SUBMIT_HEARTBEAT = "heartbeat";
+    static final String API_SUBMIT_DATA = "submit_data";
+    static final String API_NOTIFY = "notify";
+    // endregion
+
+
+    static void init(Context context) {
+        APP_DIR = context.getFilesDir().getAbsolutePath();
+        db = context.openOrCreateDatabase("EasyTrack_TizenAgent_LocalDB", MODE_PRIVATE, null);
+        db.execSQL("CREATE TABLE IF NOT EXISTS SensorRecords(sensorId TINYINT DEFAULT(0), timestamp BIGINT DEFAULT(0), accuracy INT DEFAULT(0), data BLOB DEFAULT(NULL));");
+    }
+
+
+    static synchronized void saveSensorRecord(byte[] data) {
+        db.execSQL("INSERT INTO SensorRecords(sensorId, timestamp, accuracy, data) VALUES(?, ?, ?, ?)", new Object[]{
+                data[1],
+                bytes2long(data),
+                bytes2int(data),
+                Arrays.copyOfRange(data, 14, data.length)
+        });
+    }
+
+    @SuppressWarnings("unused")
+    static synchronized void cleanDb() {
+        db.execSQL("DELETE FROM SensorRecords WHERE 1;");
+    }
+
+    @SuppressWarnings("unused")
+    static float bytes2float(final byte[] data, final int startIndex) {
+        byte[] floatBytes = new byte[4];
+        System.arraycopy(data, startIndex, floatBytes, 0, 4);
+        return ByteBuffer.wrap(floatBytes).order(ByteOrder.LITTLE_ENDIAN).getFloat();
+    }
+
+    private static int bytes2int(final byte[] data) {
+        byte[] intBytes = new byte[4];
+        System.arraycopy(data, 10, intBytes, 0, 4);
+        return ByteBuffer.wrap(intBytes).order(ByteOrder.LITTLE_ENDIAN).getInt();
+    }
+
+    private static long bytes2long(final byte[] data) {
+        byte[] longBytes = new byte[8];
+        System.arraycopy(data, 2, longBytes, 0, 8);
+        return ByteBuffer.wrap(longBytes).order(ByteOrder.LITTLE_ENDIAN).getLong();
+    }
+
+    @SuppressWarnings("unused")
+    static byte[] short2bytes(final short value) {
+        return new byte[]{(byte) value, (byte) (value >> 8)};
+    }
+
+
+    private static String[] bytes2hexStrings(final byte[] bytes, final int offset) {
+        String[] res = new String[bytes.length - offset];
+        for (int n = offset; n < bytes.length; n++) {
+            int intVal = bytes[n] & 0xff;
+            res[n - offset] = "";
+            if (intVal < 0x10)
+                res[n - offset] += "0";
+            res[n - offset] += Integer.toHexString(intVal).toUpperCase();
+        }
+        return res;
+    }
+
+    private static String[] bytes2hexStrings(final byte[] bytes) {
+        return bytes2hexStrings(bytes, 0);
+    }
+
+    @SuppressWarnings("unused")
+    public static String bytes2hexString(final byte[] bytes, final int offset) {
+        return TextUtils.join(" ", bytes2hexStrings(bytes, offset));
+    }
+
+    @SuppressWarnings("unused")
+    public static String bytes2hexString(final byte[] bytes) {
+        return TextUtils.join(" ", bytes2hexStrings(bytes));
+    }
+
+    static String[] getFiles(final String path) {
+        final Pattern re = Pattern.compile("[0-9]+\\.csv");
+        return new File(path).list(new FilenameFilter() {
+            @Override
+            public boolean accept(File dir, String name) {
+                return new File(dir, name).isFile() && re.matcher(name).matches();
+            }
+        });
+    }
+
+    static int countSensorDataFiles() {
+        String[] res = getFiles(APP_DIR);
+        return res == null ? 0 : res.length;
+    }
+
+    static HttpResponse post(String api, List<NameValuePair> parameters, @Nullable File file) throws IOException {
+        final String SERVER_URL = "http://165.246.43.162:36012";
+
+        HttpPost httppost = new HttpPost(String.format(Locale.US, "%s/%s", SERVER_URL, api));
+        HttpClient httpclient = new DefaultHttpClient();
+        HttpEntity entity = null;
+
+        if (file == null) {
+            EntityBuilder entityBuilder = EntityBuilder.create();
+            entityBuilder.setContentType(ContentType.APPLICATION_JSON);
+            entityBuilder.setParameters(parameters);
+            entity = entityBuilder.build();
+        } else {
+            MultipartEntityBuilder entityBuilder = MultipartEntityBuilder.create();
+            entityBuilder.setMode(HttpMultipartMode.BROWSER_COMPATIBLE);
+            for (NameValuePair pair : parameters)
+                entityBuilder.addTextBody(pair.getName(), pair.getValue());
+            entityBuilder.addPart("file", new FileBody(file));
+            entity = entityBuilder.build();
+        }
+
+        httppost.setEntity(entity);
+        return httpclient.execute(httppost);
+    }
+
+    static String inputStreamToString(InputStream is) throws IOException {
+        InputStreamReader reader = new InputStreamReader(is);
+        StringBuilder sb = new StringBuilder();
+
+        char[] buf = new char[128];
+        int read;
+        while ((read = reader.read(buf)) > 0)
+            sb.append(buf, 0, read);
+
+        reader.close();
+        return sb.toString();
+    }
+
+    public static void sendHeartBeatMessage() {
+        List<NameValuePair> params = new ArrayList<>();
+        params.add(new BasicNameValuePair("username", "test"));
+        params.add(new BasicNameValuePair("password", "0123456789"));
+        try {
+            post(API_SUBMIT_HEARTBEAT, params, null);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        // TODO: Continue here
+    }
+}
+
+class ServerResult {
+    static final short OK = 0;
+    static final short FAIL = 1;
+    static final short BAD_JSON_PARAMETERS = 2;
+    static final short USERNAME_TAKEN = 3;
+    static final short TOO_SHORT_PASSWORD = 4;
+    static final short TOO_LONG_PASSWORD = 5;
+    static final short USER_DOES_NOT_EXIST = 6;
+    static final short BAD_PASSWORD = 7;
+}
+
 class SensorTypes {
     static final byte ALL = 0x00;
     static final byte ACCELEROMETER = 0x01;
@@ -128,7 +328,6 @@ class SensorTypes {
     };
 }
 
-@SuppressWarnings("all")
 class SensorSampleDurations {
     static short _100ms(short ms_interval) throws IncorrectDurationException {
         if (ms_interval < 1 || ms_interval > 100 || 100 % ms_interval != 0)
@@ -214,7 +413,6 @@ class SensorSampleDurations {
     }
 }
 
-@SuppressWarnings("all")
 class MessagingConstants {
     static final byte RES_OK = 0x01;
     static final byte RES_FAIL = 0x02;
@@ -231,76 +429,79 @@ class MessagingConstants {
     }
 }
 
-@SuppressWarnings("all")
-class Tools {
-    static SQLiteDatabase db;
+class Connection {
+    // region Variables
+    private ConsumerServiceReceiver receiver;
+    private static ConsumerService mConsumerService;
+    private static boolean mIsBound = false;
+    // tvStatus = findViewById(R.id.tvStatus);
+    // endregion
 
+    private void init(Context context) {
+        // Bind service
+        Intent intent = new Intent(context, ConsumerService.class);
+        mIsBound = context.bindService(intent, mConnection, Context.BIND_AUTO_CREATE);
 
-    static void init(Context context) {
-        db = context.openOrCreateDatabase("EasyTrack_TizenAgent_LocalDB", MODE_PRIVATE, null);
-        db.execSQL("CREATE TABLE IF NOT EXISTS SensorRecords(sensorId TINYINT DEFAULT(0), timestamp BIGINT DEFAULT(0), accuracy INT DEFAULT(0), data BLOB DEFAULT(NULL));");
+        receiver = new ConsumerServiceReceiver();
+
+        IntentFilter filter = new IntentFilter();
+        filter.addAction("kr.ac.inha.nsl.ConsumerService");
+        context.registerReceiver(receiver, filter);
     }
 
+    private void destroy(Context context) {
+        context.unregisterReceiver(receiver);
 
-    static synchronized void saveSensorRecord(byte[] data) {
-        db.execSQL("INSERT INTO SensorRecords(sensorId, timestamp, accuracy, data) VALUES(?, ?, ?, ?)", new Object[]{
-                data[1],
-                bytes2long(data, 2),
-                bytes2int(data, 10),
-                Arrays.copyOfRange(data, 14, data.length)
-        });
-    }
-
-
-    static synchronized void cleanDb() {
-        db.execSQL("DELETE FROM SensorRecords WHERE 1;");
-    }
-
-
-    static float bytes2float(final byte[] data, final int startIndex) {
-        byte[] floatBytes = new byte[4];
-        System.arraycopy(data, startIndex, floatBytes, 0, 4);
-        return ByteBuffer.wrap(floatBytes).order(ByteOrder.LITTLE_ENDIAN).getFloat();
-    }
-
-    static int bytes2int(final byte[] data, final int startIndex) {
-        byte[] intBytes = new byte[4];
-        System.arraycopy(data, startIndex, intBytes, 0, 4);
-        return ByteBuffer.wrap(intBytes).order(ByteOrder.LITTLE_ENDIAN).getInt();
-    }
-
-    static long bytes2long(final byte[] data, final int startIndex) {
-        byte[] longBytes = new byte[8];
-        System.arraycopy(data, startIndex, longBytes, 0, 8);
-        return ByteBuffer.wrap(longBytes).order(ByteOrder.LITTLE_ENDIAN).getLong();
-    }
-
-    static byte[] short2bytes(final short value) {
-        return new byte[]{(byte) value, (byte) (value >> 8)};
-    }
-
-
-    public static String[] bytes2hexStrings(final byte[] bytes, final int offset) {
-        String[] res = new String[bytes.length - offset];
-        for (int n = offset; n < bytes.length; n++) {
-            int intVal = bytes[n] & 0xff;
-            res[n - offset] = "";
-            if (intVal < 0x10)
-                res[n - offset] += "0";
-            res[n - offset] += Integer.toHexString(intVal).toUpperCase();
+        Log.e("CLOSING SERVICE", "CLOSING SERVICE");
+        // Clean up connections
+        // if (mIsBound && mConsumerService != null && !mConsumerService.closeConnection()) {
+        //     tvStatus.setText(getString(R.string.disconnected));
+        // }
+        // Unbind service
+        if (mIsBound) {
+            context.unbindService(mConnection);
+            mIsBound = false;
         }
-        return res;
     }
 
-    public static String[] bytes2hexStrings(final byte[] bytes) {
-        return bytes2hexStrings(bytes, 0);
+    @SuppressLint("SetTextI18n")
+    private final ServiceConnection mConnection = new ServiceConnection() {
+        @Override
+        public void onServiceConnected(ComponentName className, IBinder service) {
+            mConsumerService = ((ConsumerService.LocalBinder) service).getService();
+            //tvStatus.setText("Service connected");
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName className) {
+            mConsumerService = null;
+            mIsBound = false;
+            //tvStatus.setText("Service disconnected");
+        }
+    };
+
+    public void connect(View view) {
+        if (mIsBound && mConsumerService != null)
+            mConsumerService.findPeers();
     }
 
-    public static String bytes2hexString(final byte[] bytes, final int offset) {
-        return String.join(" ", bytes2hexStrings(bytes, offset));
+    public void disconnect(Context context, View view) {
+        if (mIsBound && mConsumerService != null && !mConsumerService.closeConnection()) {
+            //tvStatus.setText(getString(R.string.disconnected));
+            Toast.makeText(context, R.string.ConnectionDoesNotExists, Toast.LENGTH_SHORT).show();
+        }
     }
 
-    public static String bytes2hexString(final byte[] bytes) {
-        return String.join(" ", bytes2hexStrings(bytes));
+    public class ConsumerServiceReceiver extends BroadcastReceiver {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            ArrayList<String> args = intent.getStringArrayListExtra("args");
+            String action = args.remove(0);
+
+            //if (action.equals("updateTextView"))
+            //    tvStatus.setText(TextUtils.concat(args.toArray(new String[0])).toString());
+            //else if (action.equals("log"))
+            //    Log.i("LOG", TextUtils.concat(args.toArray(new String[0])).toString());
+        }
     }
 }
