@@ -40,6 +40,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 import java.util.regex.Pattern;
 
 import static android.content.Context.MODE_PRIVATE;
@@ -153,21 +155,14 @@ public class Tools {
 
         HttpPost httppost = new HttpPost(String.format(Locale.US, "%s/%s", SERVER_URL, api));
         HttpClient httpclient = new DefaultHttpClient();
-        HttpEntity entity = null;
 
-        if (file == null) {
-            EntityBuilder entityBuilder = EntityBuilder.create();
-            entityBuilder.setContentType(ContentType.APPLICATION_JSON);
-            entityBuilder.setParameters(parameters);
-            entity = entityBuilder.build();
-        } else {
-            MultipartEntityBuilder entityBuilder = MultipartEntityBuilder.create();
-            entityBuilder.setMode(HttpMultipartMode.BROWSER_COMPATIBLE);
-            for (NameValuePair pair : parameters)
-                entityBuilder.addTextBody(pair.getName(), pair.getValue());
+        MultipartEntityBuilder entityBuilder = MultipartEntityBuilder.create();
+        entityBuilder.setMode(HttpMultipartMode.STRICT);
+        for (NameValuePair pair : parameters)
+            entityBuilder.addTextBody(pair.getName(), pair.getValue());
+        if (file != null)
             entityBuilder.addPart("file", new FileBody(file));
-            entity = entityBuilder.build();
-        }
+        HttpEntity entity = entityBuilder.build();
 
         httppost.setEntity(entity);
         return httpclient.execute(httppost);
@@ -186,16 +181,20 @@ public class Tools {
         return sb.toString();
     }
 
-    public static void sendHeartBeatMessage() {
-        List<NameValuePair> params = new ArrayList<>();
-        params.add(new BasicNameValuePair("username", "test"));
-        params.add(new BasicNameValuePair("password", "0123456789"));
-        try {
-            post(API_SUBMIT_HEARTBEAT, params, null);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        // TODO: Continue here
+    static void sendHeartBeatMessage() {
+        Executors.newCachedThreadPool().execute(new Runnable() {
+            @Override
+            public void run() {
+                List<NameValuePair> params = new ArrayList<>();
+                params.add(new BasicNameValuePair("username", "test"));
+                params.add(new BasicNameValuePair("password", "0123456789"));
+                try {
+                    post(API_SUBMIT_HEARTBEAT, params, null);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        });
     }
 }
 
@@ -504,4 +503,8 @@ class Connection {
             //    Log.i("LOG", TextUtils.concat(args.toArray(new String[0])).toString());
         }
     }
+}
+
+abstract class StoppableRunnable implements Runnable {
+    boolean terminate = false;
 }

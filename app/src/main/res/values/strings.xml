@@ -23,5 +23,6 @@
     <string name="start_data_collection">Start data collection</string>
     <string name="stop_data_collection">Stop data collection</string>
     <string name="upload_sensor_data">Upload sensor data</string>
+    <string name="cancel_upload_sensor_data">Cancel upload-action</string>
     <string name="log">LOG:</string>
 </resources>

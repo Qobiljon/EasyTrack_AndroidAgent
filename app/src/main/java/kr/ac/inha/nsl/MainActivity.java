@@ -1,5 +1,6 @@
 package kr.ac.inha.nsl;
 
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Context;
 import android.hardware.Sensor;
@@ -27,14 +28,11 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.net.HttpURLConnection;
-import java.net.SocketException;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 public class MainActivity extends Activity {
     @Override
@@ -47,6 +45,7 @@ public class MainActivity extends Activity {
         filesCountTextView = findViewById(R.id.filesCountTextView);
         startDataCollectionButton = findViewById(R.id.startDataCollectionButton);
         stopDataCollectionButton = findViewById(R.id.stopDataCollectionButton);
+        uploadSensorDataButton = findViewById(R.id.uploadSensorDataButton);
         logLinesCount = 0;
 
         initDataSources();
@@ -119,6 +118,7 @@ public class MainActivity extends Activity {
     private TextView logEditText;
     private Button startDataCollectionButton;
     private Button stopDataCollectionButton;
+    private Button uploadSensorDataButton;
     private FileObserver filesCounterObserver;
     private int filesCount;
     private int logLinesCount;
@@ -128,16 +128,22 @@ public class MainActivity extends Activity {
     private SensorManager sensorManager;
     private SensorEventListener sensorEventListener;
 
-    private ExecutorService submitDataExecutor;
+    private Thread submitDataThread;
+    private StoppableRunnable submitDataRunnable;
     // endregion
 
-    private void log(String message) {
-        if (logLinesCount == logEditText.getMaxLines())
-            logEditText.setText(String.format(Locale.US, "%s%n%s", logEditText.getText().toString().substring(logEditText.getText().toString().indexOf('\n') + 1), message));
-        else {
-            logEditText.setText(String.format("%s%n%s", logEditText.getText(), message));
-            logLinesCount++;
-        }
+    private void log(final String message) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (logLinesCount == logEditText.getMaxLines())
+                    logEditText.setText(String.format(Locale.US, "%s%n%s", logEditText.getText().toString().substring(logEditText.getText().toString().indexOf('\n') + 1), message));
+                else {
+                    logEditText.setText(String.format("%s%n%s", logEditText.getText(), message));
+                    logLinesCount++;
+                }
+            }
+        });
     }
 
     private void checkUpdateCurrentLogWriter() throws IOException {
@@ -151,7 +157,7 @@ public class MainActivity extends Activity {
             String filePath = String.format(Locale.US, "%s%s%s.csv", Tools.APP_DIR, File.separator, nowStamp);
             logWriter = new FileWriter(filePath, true);
 
-            log("\nData-log file created/attached");
+            log("Data-log file created/attached");
             Tools.sendHeartBeatMessage();
         } else if (!nowStamp.equals(openLogWriterStamp)) {
             logWriter.flush();
@@ -193,50 +199,107 @@ public class MainActivity extends Activity {
         log("Sensor data collection stopped");
     }
 
-    public void uploadSensorDataClick(View view) {
-        if (submitDataExecutor != null && !submitDataExecutor.isShutdown())
-            submitDataExecutor.shutdownNow();
+    public void startFilesCounterThread() {
+        if (filesCounterObserver != null)
+            filesCounterObserver.stopWatching();
 
-        submitDataExecutor = Executors.newCachedThreadPool();
-        submitDataExecutor.execute(new Runnable() {
+        filesCount = Tools.countSensorDataFiles();
+        filesCountTextView.setText(String.format(Locale.US, "FILES: %d", filesCount));
+        filesCounterObserver = new FileObserver(Tools.APP_DIR) {
             @Override
-            public void run() {
-                String[] files = Tools.getFiles(Tools.APP_DIR);
-                if (files != null) {
-                    List<Long> fileNamesInLong = new ArrayList<>();
-                    for (String file : files) {
-                        String tmp = file.substring(file.lastIndexOf('/') + 1);
-                        fileNamesInLong.add(Long.parseLong(tmp.substring(0, tmp.lastIndexOf('.'))));
-                    }
-                    Collections.sort(fileNamesInLong);
-                    try {
-                        for (int n = 0; n < fileNamesInLong.size() - 1; n++) {
-                            String filePath = String.format(Locale.US, "%s%s%s.csv", Tools.APP_DIR, File.separator, fileNamesInLong.get(n));
-                            List<NameValuePair> params = new ArrayList<>();
-                            params.add(new BasicNameValuePair("username", "test"));
-                            params.add(new BasicNameValuePair("password", "0123456789"));
-                            File file = new File(filePath);
-                            HttpResponse response = Tools.post(Tools.API_SUBMIT_DATA, params, file);
-                            if (response.getStatusLine().getStatusCode() == HttpURLConnection.HTTP_OK) {
-                                JSONObject result = new JSONObject(Tools.inputStreamToString(response.getEntity().getContent()));
-                                if (result.has("result") && result.getInt("result") == ServerResult.OK)
-                                    Log.d("IO ACTION", String.format("File %s %s uploaded!", file.getName(), file.delete() ? "was" : "wasn't"));
-                                else
-                                    Log.e("UPLOAD ERROR", result.toString());
-                            } else {
-                                Log.e("HTTP ERROR", response.getStatusLine().getReasonPhrase());
-                            }
-                        }
-                        log("Data uploaded on Server");
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                        Looper.prepare();
-                        Toast.makeText(MainActivity.this, "Please check your connection first!", Toast.LENGTH_SHORT).show();
-                    } catch (JSONException e) {
-                        e.printStackTrace();
-                    }
+            public void onEvent(int event, String path) {
+                if (event == FileObserver.CREATE) {
+                    filesCountTextView.setText(String.format(Locale.US, "FILES: %d", ++filesCount));
+                } else if (event == FileObserver.DELETE) {
+                    filesCountTextView.setText(String.format(Locale.US, "FILES: %d", --filesCount));
                 }
             }
-        });
+        };
+        filesCounterObserver.startWatching();
+    }
+
+    public void stopFilesCounterThread() {
+        if (filesCounterObserver != null)
+            filesCounterObserver.stopWatching();
+        filesCounterObserver = null;
+    }
+
+    public void uploadSensorDataClick(View view) {
+        if (submitDataRunnable != null && !submitDataRunnable.terminate) {
+            submitDataRunnable.terminate = true;
+            try {
+                submitDataThread.join();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            uploadSensorDataButton.setText(getString(R.string.upload_sensor_data));
+        } else {
+            submitDataThread = new Thread(submitDataRunnable = new StoppableRunnable() {
+                @SuppressLint("SetTextI18n")
+                @Override
+                public void run() {
+                    stopFilesCounterThread();
+                    String[] files = Tools.getFiles(Tools.APP_DIR);
+                    if (files != null) {
+                        List<Long> fileNamesInLong = new ArrayList<>();
+                        for (String file : files) {
+                            if (!file.endsWith(".csv"))
+                                continue;
+                            String tmp = file.substring(file.lastIndexOf('/') + 1);
+                            fileNamesInLong.add(Long.parseLong(tmp.substring(0, tmp.lastIndexOf('.'))));
+                        }
+                        Collections.sort(fileNamesInLong);
+                        try {
+                            for (int n = 0; n < fileNamesInLong.size() - 1; n++) {
+                                if (this.terminate)
+                                    break;
+                                filesCountTextView.setText(String.format(Locale.US, "%d%% UPLOADED", (n + 1) * 100 / fileNamesInLong.size()));
+                                String filePath = String.format(Locale.US, "%s%s%s.csv", Tools.APP_DIR, File.separator, fileNamesInLong.get(n));
+                                List<NameValuePair> params = new ArrayList<>();
+                                params.add(new BasicNameValuePair("username", "test"));
+                                params.add(new BasicNameValuePair("password", "0123456789"));
+                                File file = new File(filePath);
+                                HttpResponse response = Tools.post(Tools.API_SUBMIT_DATA, params, file);
+                                if (response.getStatusLine().getStatusCode() == HttpURLConnection.HTTP_OK) {
+                                    JSONObject result = new JSONObject(Tools.inputStreamToString(response.getEntity().getContent()));
+
+                                    if (result.has("result") && result.getInt("result") == ServerResult.OK) {
+                                        boolean deleted = file.delete();
+                                        Log.d("IO ACTION", String.format("File %s %s uploaded!", file.getName(), deleted ? "was" : "wasn't"));
+                                    } else
+                                        Log.e("UPLOAD ERROR", result.toString());
+                                } else {
+                                    Log.e("HTTP ERROR", response.getStatusLine().getReasonPhrase());
+                                }
+                            }
+                            log("Data uploaded on Server");
+                            filesCountTextView.setText("100%% UPLOADED");
+                            try {
+                                Thread.sleep(300);
+                            } catch (InterruptedException e) {
+                                e.printStackTrace();
+                            }
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                            Looper.prepare();
+                            Toast.makeText(MainActivity.this, "Please check your connection first!", Toast.LENGTH_SHORT).show();
+                        } catch (JSONException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            submitDataRunnable = null;
+                            submitDataThread = null;
+                            uploadSensorDataButton.setText(getString(R.string.upload_sensor_data));
+                        }
+                    });
+                    startFilesCounterThread();
+                }
+            });
+            submitDataThread.start();
+            uploadSensorDataButton.setText(getString(R.string.cancel_upload_sensor_data));
+        }
     }
 }
