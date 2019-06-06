@@ -3,7 +3,6 @@ package kr.ac.inha.nsl;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Locale;
 
 import android.content.Intent;
 import android.os.Handler;
@@ -18,14 +17,14 @@ import com.samsung.android.sdk.accessory.SAAgent;
 import com.samsung.android.sdk.accessory.SAPeerAgent;
 import com.samsung.android.sdk.accessory.SASocket;
 
-public class ConsumerService extends SAAgent {
-    static final String TAG = "ConsumerService";
+public class EasyTrack_AndroidSAAAgent extends SAAgent {
+    static final String TAG = "EasyTrack_AndroidSAAAgent";
     private static final Class<ServiceConnection> SASOCKET_CLASS = ServiceConnection.class;
     private final IBinder mBinder = new LocalBinder();
     private ServiceConnection mConnectionHandler;
     private Handler mHandler = new Handler();
 
-    public ConsumerService() {
+    public EasyTrack_AndroidSAAAgent() {
         super(TAG, SASOCKET_CLASS);
     }
 
@@ -138,8 +137,8 @@ public class ConsumerService extends SAAgent {
     }
 
     class LocalBinder extends Binder {
-        ConsumerService getService() {
-            return ConsumerService.this;
+        EasyTrack_AndroidSAAAgent getService() {
+            return EasyTrack_AndroidSAAAgent.this;
         }
     }
 
@@ -189,7 +188,7 @@ public class ConsumerService extends SAAgent {
 
     public void sendResultBroadcast(String... args) {
         Intent intent = new Intent();
-        intent.setAction("kr.ac.inha.nsl.ConsumerService");
+        intent.setAction("kr.ac.inha.nsl.EasyTrack_AndroidSAAAgent");
         if (args.length > 0) {
             intent.putStringArrayListExtra("args", new ArrayList<>(Arrays.asList(args)));
             sendBroadcast(intent);

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">EasyTrack Android Agent App</string>
+    <string name="app_name">EasyTrack\nAndroid Agent App</string>
     <string name="ConnectionEstablishedMsg">Connection established</string>
     <string name="ConnectionTerminateddMsg">Connection terminated</string>
     <string name="ConnectionAlreadyExist">Already connected</string>
@@ -25,4 +25,10 @@
     <string name="upload_sensor_data">Upload sensor data</string>
     <string name="cancel_upload_sensor_data">Cancel upload-action</string>
     <string name="log">LOG:</string>
+    <string name="authentication">Authentication</string>
+    <string name="username">Username</string>
+    <string name="password">Password</string>
+    <string name="login">Login</string>
+    <string name="register">Register</string>
+    <string name="logout">Logout</string>
 </resources>

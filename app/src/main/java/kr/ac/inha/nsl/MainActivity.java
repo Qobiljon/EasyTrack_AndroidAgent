@@ -3,6 +3,7 @@ package kr.ac.inha.nsl;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
@@ -38,7 +39,6 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        Tools.init(this);
         setContentView(R.layout.activity_main);
 
         logEditText = findViewById(R.id.logTextView);
@@ -47,6 +47,9 @@ public class MainActivity extends Activity {
         stopDataCollectionButton = findViewById(R.id.stopDataCollectionButton);
         uploadSensorDataButton = findViewById(R.id.uploadSensorDataButton);
         logLinesCount = 0;
+
+        TextView usernameTextView = findViewById(R.id.usernameTextView);
+        usernameTextView.setText(String.format("User: %s", Tools.prefs.getString("username", null)));
 
         initDataSources();
     }
@@ -111,6 +114,11 @@ public class MainActivity extends Activity {
             filesCounterObserver.stopWatching();
         filesCounterObserver = null;
         super.onStop();
+    }
+
+    @Override
+    public void onBackPressed() {
+        Tools.hideApp(this);
     }
 
     // region Variable
@@ -256,8 +264,8 @@ public class MainActivity extends Activity {
                                 filesCountTextView.setText(String.format(Locale.US, "%d%% UPLOADED", (n + 1) * 100 / fileNamesInLong.size()));
                                 String filePath = String.format(Locale.US, "%s%s%s.csv", Tools.APP_DIR, File.separator, fileNamesInLong.get(n));
                                 List<NameValuePair> params = new ArrayList<>();
-                                params.add(new BasicNameValuePair("username", "test"));
-                                params.add(new BasicNameValuePair("password", "0123456789"));
+                                params.add(new BasicNameValuePair("username", Tools.prefs.getString("username", null)));
+                                params.add(new BasicNameValuePair("password", Tools.prefs.getString("password", null)));
                                 File file = new File(filePath);
                                 HttpResponse response = Tools.post(Tools.API_SUBMIT_DATA, params, file);
                                 if (response.getStatusLine().getStatusCode() == HttpURLConnection.HTTP_OK) {
@@ -301,5 +309,14 @@ public class MainActivity extends Activity {
             submitDataThread.start();
             uploadSensorDataButton.setText(getString(R.string.cancel_upload_sensor_data));
         }
+    }
+
+    public void logoutButtonClick(View view) {
+        SharedPreferences.Editor editor = Tools.prefs.edit();
+        editor.remove("username");
+        editor.remove("password");
+        editor.putBoolean("logged_in", false);
+        editor.apply();
+        finish();
     }
 }

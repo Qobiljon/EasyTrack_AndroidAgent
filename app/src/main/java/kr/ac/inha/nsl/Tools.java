@@ -1,12 +1,14 @@
 package kr.ac.inha.nsl;
 
 import android.annotation.SuppressLint;
+import android.app.Activity;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ServiceConnection;
+import android.content.SharedPreferences;
 import android.database.sqlite.SQLiteDatabase;
 import android.os.IBinder;
 import android.support.annotation.Nullable;
@@ -19,9 +21,7 @@ import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.NameValuePair;
 import org.apache.http.client.HttpClient;
-import org.apache.http.client.entity.EntityBuilder;
 import org.apache.http.client.methods.HttpPost;
-import org.apache.http.entity.ContentType;
 import org.apache.http.entity.mime.HttpMultipartMode;
 import org.apache.http.entity.mime.MultipartEntityBuilder;
 import org.apache.http.entity.mime.content.FileBody;
@@ -35,12 +35,10 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
-import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.regex.Pattern;
 
@@ -48,6 +46,7 @@ import static android.content.Context.MODE_PRIVATE;
 
 public class Tools {
     // region Variables
+    static SharedPreferences prefs;
     static String APP_DIR;
     private static SQLiteDatabase db;
     // endregion
@@ -67,8 +66,24 @@ public class Tools {
         APP_DIR = context.getFilesDir().getAbsolutePath();
         db = context.openOrCreateDatabase("EasyTrack_TizenAgent_LocalDB", MODE_PRIVATE, null);
         db.execSQL("CREATE TABLE IF NOT EXISTS SensorRecords(sensorId TINYINT DEFAULT(0), timestamp BIGINT DEFAULT(0), accuracy INT DEFAULT(0), data BLOB DEFAULT(NULL));");
+        prefs = context.getSharedPreferences(context.getString(R.string.app_name), MODE_PRIVATE);
     }
 
+
+    static void exitApp(Activity activity) {
+        do {
+            Activity current = activity;
+            activity = activity.getParent();
+            current.finishAffinity();
+        } while (activity != null);
+        System.exit(0);
+    }
+
+    static void hideApp(Activity activity) {
+        Intent intent = new Intent(Intent.ACTION_MAIN);
+        intent.addCategory(Intent.CATEGORY_HOME);
+        activity.startActivity(intent);
+    }
 
     static synchronized void saveSensorRecord(byte[] data) {
         db.execSQL("INSERT INTO SensorRecords(sensorId, timestamp, accuracy, data) VALUES(?, ?, ?, ?)", new Object[]{
@@ -186,8 +201,8 @@ public class Tools {
             @Override
             public void run() {
                 List<NameValuePair> params = new ArrayList<>();
-                params.add(new BasicNameValuePair("username", "test"));
-                params.add(new BasicNameValuePair("password", "0123456789"));
+                params.add(new BasicNameValuePair("username", Tools.prefs.getString("username", null)));
+                params.add(new BasicNameValuePair("password", Tools.prefs.getString("password", null)));
                 try {
                     post(API_SUBMIT_HEARTBEAT, params, null);
                 } catch (IOException e) {
@@ -431,20 +446,20 @@ class MessagingConstants {
 class Connection {
     // region Variables
     private ConsumerServiceReceiver receiver;
-    private static ConsumerService mConsumerService;
+    private static EasyTrack_AndroidSAAAgent mEasyTrackAndroidAgent;
     private static boolean mIsBound = false;
     // tvStatus = findViewById(R.id.tvStatus);
     // endregion
 
     private void init(Context context) {
         // Bind service
-        Intent intent = new Intent(context, ConsumerService.class);
+        Intent intent = new Intent(context, EasyTrack_AndroidSAAAgent.class);
         mIsBound = context.bindService(intent, mConnection, Context.BIND_AUTO_CREATE);
 
         receiver = new ConsumerServiceReceiver();
 
         IntentFilter filter = new IntentFilter();
-        filter.addAction("kr.ac.inha.nsl.ConsumerService");
+        filter.addAction("kr.ac.inha.nsl.EasyTrack_AndroidSAAAgent");
         context.registerReceiver(receiver, filter);
     }
 
@@ -453,7 +468,7 @@ class Connection {
 
         Log.e("CLOSING SERVICE", "CLOSING SERVICE");
         // Clean up connections
-        // if (mIsBound && mConsumerService != null && !mConsumerService.closeConnection()) {
+        // if (mIsBound && mEasyTrackAndroidAgent != null && !mEasyTrackAndroidAgent.closeConnection()) {
         //     tvStatus.setText(getString(R.string.disconnected));
         // }
         // Unbind service
@@ -467,25 +482,25 @@ class Connection {
     private final ServiceConnection mConnection = new ServiceConnection() {
         @Override
         public void onServiceConnected(ComponentName className, IBinder service) {
-            mConsumerService = ((ConsumerService.LocalBinder) service).getService();
+            mEasyTrackAndroidAgent = ((EasyTrack_AndroidSAAAgent.LocalBinder) service).getService();
             //tvStatus.setText("Service connected");
         }
 
         @Override
         public void onServiceDisconnected(ComponentName className) {
-            mConsumerService = null;
+            mEasyTrackAndroidAgent = null;
             mIsBound = false;
             //tvStatus.setText("Service disconnected");
         }
     };
 
     public void connect(View view) {
-        if (mIsBound && mConsumerService != null)
-            mConsumerService.findPeers();
+        if (mIsBound && mEasyTrackAndroidAgent != null)
+            mEasyTrackAndroidAgent.findPeers();
     }
 
     public void disconnect(Context context, View view) {
-        if (mIsBound && mConsumerService != null && !mConsumerService.closeConnection()) {
+        if (mIsBound && mEasyTrackAndroidAgent != null && !mEasyTrackAndroidAgent.closeConnection()) {
             //tvStatus.setText(getString(R.string.disconnected));
             Toast.makeText(context, R.string.ConnectionDoesNotExists, Toast.LENGTH_SHORT).show();
         }
@@ -507,4 +522,12 @@ class Connection {
 
 abstract class StoppableRunnable implements Runnable {
     boolean terminate = false;
+}
+
+abstract class RunnableWithArguments implements Runnable {
+    Object[] args;
+
+    public RunnableWithArguments(Object... args) {
+        this.args = args;
+    }
 }
