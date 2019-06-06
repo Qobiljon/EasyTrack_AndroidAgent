@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">EasyTrack Tizen Agent App</string>
+    <string name="app_name">EasyTrack Android Agent App</string>
     <string name="ConnectionEstablishedMsg">Connection established</string>
     <string name="ConnectionTerminateddMsg">Connection terminated</string>
     <string name="ConnectionAlreadyExist">Already connected</string>
