@@ -32,6 +32,7 @@ import java.net.HttpURLConnection;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 
@@ -61,7 +62,7 @@ public class MainActivity extends Activity {
             public void onSensorChanged(SensorEvent event) {
                 try {
                     StringBuilder sb = new StringBuilder("smartphone-android,");
-                    sb.append(Calendar.getInstance().getTimeInMillis()).append(',');
+                    sb.append(Tools.LAST_REBOOT_TIMESTAMP + (int) (event.timestamp / 1000000)).append(',');
                     sb.append(event.sensor.getType()).append(',');
                     sb.append(event.sensor.getName()).append(',');
                     sb.append(event.accuracy).append(',');
@@ -105,6 +106,8 @@ public class MainActivity extends Activity {
         };
         filesCounterObserver.startWatching();
 
+        log("Campaign settings loaded!");
+
         super.onStart();
     }
 
@@ -122,6 +125,9 @@ public class MainActivity extends Activity {
     }
 
     // region Variable
+    private HashMap<Integer, Integer> dataRateMap;
+    private HashMap<Integer, Sensor> sensorMap;
+
     private TextView filesCountTextView;
     private TextView logEditText;
     private Button startDataCollectionButton;
@@ -185,7 +191,7 @@ public class MainActivity extends Activity {
 
         List<Sensor> deviceSensors = sensorManager.getSensorList(Sensor.TYPE_ALL);
         for (Sensor sensor : deviceSensors) {
-            sensorManager.registerListener(sensorEventListener, sensor, SensorManager.SENSOR_DELAY_NORMAL);
+            sensorManager.registerListener(sensorEventListener, sensor, SensorManager.SENSOR_DELAY_FASTEST);
             sensorManager.requestTriggerSensor(new TriggerEventListener() {
                 @Override
                 public void onTrigger(TriggerEvent event) {

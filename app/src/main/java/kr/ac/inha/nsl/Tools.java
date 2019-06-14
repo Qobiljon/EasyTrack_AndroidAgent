@@ -11,6 +11,7 @@ import android.content.ServiceConnection;
 import android.content.SharedPreferences;
 import android.database.sqlite.SQLiteDatabase;
 import android.os.IBinder;
+import android.os.SystemClock;
 import android.support.annotation.Nullable;
 import android.text.TextUtils;
 import android.util.Log;
@@ -43,6 +44,7 @@ import java.util.concurrent.Executors;
 import java.util.regex.Pattern;
 
 import static android.content.Context.MODE_PRIVATE;
+import static java.lang.System.currentTimeMillis;
 
 public class Tools {
     // region Variables
@@ -52,6 +54,8 @@ public class Tools {
     // endregion
 
     // region Constant values
+    static final long LAST_REBOOT_TIMESTAMP = currentTimeMillis() - SystemClock.elapsedRealtime();
+
     static final short CHANNEL_ID = 104;
     static final String API_REGISTER = "register";
     static final String API_UNREGISTER = "unregister";
