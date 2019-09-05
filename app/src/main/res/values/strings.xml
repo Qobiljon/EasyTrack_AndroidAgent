@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">EasyTrack\nAndroid Agent App</string>
+    <string name="device_as_data_source">smartphone-android</string>
     <string name="ConnectionEstablishedMsg">Connection established</string>
     <string name="ConnectionTerminateddMsg">Connection terminated</string>
     <string name="ConnectionAlreadyExist">Already connected</string>

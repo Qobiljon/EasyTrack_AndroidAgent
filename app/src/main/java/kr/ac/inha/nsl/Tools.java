@@ -60,6 +60,7 @@ public class Tools {
     static final String API_REGISTER = "register";
     static final String API_UNREGISTER = "unregister";
     static final String API_AUTHENTICATE = "authenticate";
+    static final String API_FETCH_CAMPAIGN_SETTINGS = "get_campaign_settings";
     static final String API_SUBMIT_HEARTBEAT = "heartbeat";
     static final String API_SUBMIT_DATA = "submit_data";
     static final String API_NOTIFY = "notify";

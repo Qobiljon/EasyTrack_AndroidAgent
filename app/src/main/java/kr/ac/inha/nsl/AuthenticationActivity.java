@@ -61,11 +61,7 @@ public class AuthenticationActivity extends AppCompatActivity {
                     params.add(new BasicNameValuePair("username", usernameEditText.getText().toString()));
                     params.add(new BasicNameValuePair("password", passwordEditText.getText().toString()));
                     HttpResponse response = Tools.post(Tools.API_AUTHENTICATE, params, null);
-                    try {
-                        Thread.sleep(1000);
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                    }
+                    Thread.sleep(1000);
                     if (response.getStatusLine().getStatusCode() == HttpURLConnection.HTTP_OK) {
                         JSONObject result = new JSONObject(Tools.inputStreamToString(response.getEntity().getContent()));
                         if (result.has("result") && result.getInt("result") == ServerResult.OK) {
@@ -109,7 +105,7 @@ public class AuthenticationActivity extends AppCompatActivity {
                         }
                     } else
                         throw new IOException("HTTP error while sending a post request for autentication");
-                } catch (IOException | JSONException e) {
+                } catch (IOException | JSONException | InterruptedException e) {
                     e.printStackTrace();
                     runOnUiThread(new RunnableWithArguments(serverResult) {
                         @Override

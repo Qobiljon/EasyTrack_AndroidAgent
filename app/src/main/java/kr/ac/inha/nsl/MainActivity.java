@@ -4,6 +4,7 @@ import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
@@ -22,6 +23,7 @@ import android.widget.Toast;
 import org.apache.http.HttpResponse;
 import org.apache.http.NameValuePair;
 import org.apache.http.message.BasicNameValuePair;
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -85,6 +87,61 @@ public class MainActivity extends Activity {
 
             }
         };
+
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    List<NameValuePair> params = new ArrayList<>();
+                    params.add(new BasicNameValuePair("username", Tools.prefs.getString("username", null)));
+                    params.add(new BasicNameValuePair("password", Tools.prefs.getString("password", null)));
+                    params.add(new BasicNameValuePair("device", getString(R.string.device_as_data_source)));
+                    HttpResponse response = Tools.post(Tools.API_FETCH_CAMPAIGN_SETTINGS, params, null);
+                    if (response.getStatusLine().getStatusCode() == HttpURLConnection.HTTP_OK) {
+                        JSONObject result = new JSONObject(Tools.inputStreamToString(response.getEntity().getContent()));
+                        if (result.has("result") && result.getInt("result") == ServerResult.OK) {
+                            JSONObject campaign_settings = result.getJSONObject("campaign_settings");
+                            SharedPreferences.Editor editor = Tools.prefs.edit();
+                            editor.putInt("campaign_id", campaign_settings.getInt("id"));
+                            editor.putInt("campaign_owner", campaign_settings.getInt("owner_username"));
+                            editor.putInt("campaign_name", campaign_settings.getInt("name"));
+                            editor.putInt("campaign_start_date", campaign_settings.getInt("start_date"));
+                            editor.putInt("campaign_end_date", campaign_settings.getInt("end_date"));
+                            editor.putInt("campaign_description", campaign_settings.getInt("description"));
+                            editor.apply();
+
+                            int numOfSetUpDataSources = 0;
+                            JSONArray data_sources = campaign_settings.getJSONArray("data_sources");
+                            for (int n = 0; n < data_sources.length(); n++) {
+                                JSONObject data_source = data_sources.getJSONObject(0);
+                                int data_source_id = data_source.getInt("source_id");
+                                int data_rate = data_source.getInt("data_rate");
+
+                                if (sensorManager.getDefaultSensor(data_source_id) != null) {
+                                    Sensor sensor = sensorManager.getDefaultSensor(data_source_id);
+                                    sensorManager.registerListener(sensorEventListener, sensor, data_rate * 1000);
+                                    sensorManager.requestTriggerSensor(new TriggerEventListener() {
+                                        @Override
+                                        public void onTrigger(TriggerEvent event) {
+                                            Log.e("EVENT", event.sensor.getName() + " has been triggered");
+                                        }
+                                    }, sensor);
+                                    numOfSetUpDataSources++;
+                                }
+                            }
+
+                            Toast.makeText(MainActivity.this, "Campaign settings loaded!", Toast.LENGTH_SHORT).show();
+                            log(String.format(Locale.getDefault(), "Campaign settings loaded! (%d data sources have been set up)", numOfSetUpDataSources));
+                        } else {
+                            throw new JSONException("Parameter 'result' wasn't in response json");
+                        }
+                    } else
+                        throw new IOException("HTTP error while sending a post request for autentication");
+                } catch (IOException | JSONException e) {
+                    e.printStackTrace();
+                }
+            }
+        }).start();
     }
 
     @Override
@@ -105,8 +162,6 @@ public class MainActivity extends Activity {
             }
         };
         filesCounterObserver.startWatching();
-
-        log("Campaign settings loaded!");
 
         super.onStart();
     }
@@ -276,7 +331,6 @@ public class MainActivity extends Activity {
                                 HttpResponse response = Tools.post(Tools.API_SUBMIT_DATA, params, file);
                                 if (response.getStatusLine().getStatusCode() == HttpURLConnection.HTTP_OK) {
                                     JSONObject result = new JSONObject(Tools.inputStreamToString(response.getEntity().getContent()));
-
                                     if (result.has("result") && result.getInt("result") == ServerResult.OK) {
                                         boolean deleted = file.delete();
                                         Log.d("IO ACTION", String.format("File %s %s uploaded!", file.getName(), deleted ? "was" : "wasn't"));
