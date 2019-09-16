@@ -2,9 +2,12 @@ package kr.ac.inha.nsl;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.content.ComponentName;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.ServiceConnection;
 import android.content.SharedPreferences;
-import android.content.pm.PackageManager;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
@@ -13,6 +16,7 @@ import android.hardware.TriggerEvent;
 import android.hardware.TriggerEventListener;
 import android.os.Bundle;
 import android.os.FileObserver;
+import android.os.IBinder;
 import android.os.Looper;
 import android.util.Log;
 import android.view.View;
@@ -34,11 +38,51 @@ import java.net.HttpURLConnection;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 
 public class MainActivity extends Activity {
+
+    // region Variable
+    private TextView filesCountTextView;
+    private TextView logEditText;
+    private Button startDataCollectionButton;
+    private Button stopDataCollectionButton;
+    private Button uploadSensorDataButton;
+    private FileObserver filesCounterObserver;
+    private int filesCount;
+    private int logLinesCount;
+    private FileWriter logWriter;
+    private String openLogWriterStamp;
+
+    private SensorManager sensorManager;
+    private SensorEventListener sensorEventListener;
+
+    private Thread submitDataThread;
+    private StoppableRunnable submitDataRunnable;
+
+    private ConsumerServiceReceiver receiver;
+    private static EasyTrack_TizenAgent mEasyTrackAndroidAgent;
+    private static boolean mIsBound = false;
+    private TextView tvStatus;
+    @SuppressLint("SetTextI18n")
+    private final ServiceConnection mConnection = new ServiceConnection() {
+        @Override
+        public void onServiceConnected(ComponentName className, IBinder service) {
+            mEasyTrackAndroidAgent = ((EasyTrack_TizenAgent.LocalBinder) service).getService();
+            tvStatus.setText("Service connected");
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName className) {
+            mEasyTrackAndroidAgent = null;
+            mIsBound = false;
+            tvStatus.setText("Service disconnected");
+        }
+    };
+    // endregion
+
+    // region Override
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -55,6 +99,21 @@ public class MainActivity extends Activity {
         usernameTextView.setText(String.format("User: %s", Tools.prefs.getString("username", null)));
 
         initDataSources();
+
+        this.tvStatus = findViewById(R.id.statusTextView);
+
+        // Bind service
+        Intent intent = new Intent(this, EasyTrack_TizenAgent.class);
+        mIsBound = bindService(intent, mConnection, Context.BIND_AUTO_CREATE);
+
+        receiver = new ConsumerServiceReceiver();
+
+        IntentFilter filter = new IntentFilter();
+        filter.addAction("kr.ac.inha.nsl.Tizen_SAP_Agent");
+        registerReceiver(receiver, filter);
+
+        if (mIsBound && mEasyTrackAndroidAgent != null)
+            mEasyTrackAndroidAgent.findPeers();
     }
 
     private void initDataSources() {
@@ -103,11 +162,11 @@ public class MainActivity extends Activity {
                             JSONObject campaign_settings = result.getJSONObject("campaign_settings");
                             SharedPreferences.Editor editor = Tools.prefs.edit();
                             editor.putInt("campaign_id", campaign_settings.getInt("id"));
-                            editor.putInt("campaign_owner", campaign_settings.getInt("owner_username"));
-                            editor.putInt("campaign_name", campaign_settings.getInt("name"));
+                            editor.putString("campaign_owner", campaign_settings.getString("owner_username"));
+                            editor.putString("campaign_name", campaign_settings.getString("name"));
                             editor.putInt("campaign_start_date", campaign_settings.getInt("start_date"));
                             editor.putInt("campaign_end_date", campaign_settings.getInt("end_date"));
-                            editor.putInt("campaign_description", campaign_settings.getInt("description"));
+                            editor.putString("campaign_description", campaign_settings.getString("description"));
                             editor.apply();
 
                             int numOfSetUpDataSources = 0;
@@ -130,6 +189,7 @@ public class MainActivity extends Activity {
                                 }
                             }
 
+                            Looper.prepare();
                             Toast.makeText(MainActivity.this, "Campaign settings loaded!", Toast.LENGTH_SHORT).show();
                             log(String.format(Locale.getDefault(), "Campaign settings loaded! (%d data sources have been set up)", numOfSetUpDataSources));
                         } else {
@@ -175,30 +235,26 @@ public class MainActivity extends Activity {
     }
 
     @Override
+    protected void onDestroy() {
+        unregisterReceiver(receiver);
+
+        if (mIsBound && mEasyTrackAndroidAgent != null && !mEasyTrackAndroidAgent.closeConnection()) {
+            tvStatus.setText(getString(R.string.disconnected));
+            Toast.makeText(this, R.string.ConnectionDoesNotExists, Toast.LENGTH_SHORT).show();
+        }
+
+        if (mIsBound) {
+            unbindService(mConnection);
+            mIsBound = false;
+        }
+
+        super.onDestroy();
+    }
+
+    @Override
     public void onBackPressed() {
         Tools.hideApp(this);
     }
-
-    // region Variable
-    private HashMap<Integer, Integer> dataRateMap;
-    private HashMap<Integer, Sensor> sensorMap;
-
-    private TextView filesCountTextView;
-    private TextView logEditText;
-    private Button startDataCollectionButton;
-    private Button stopDataCollectionButton;
-    private Button uploadSensorDataButton;
-    private FileObserver filesCounterObserver;
-    private int filesCount;
-    private int logLinesCount;
-    private FileWriter logWriter;
-    private String openLogWriterStamp;
-
-    private SensorManager sensorManager;
-    private SensorEventListener sensorEventListener;
-
-    private Thread submitDataThread;
-    private StoppableRunnable submitDataRunnable;
     // endregion
 
     private void log(final String message) {

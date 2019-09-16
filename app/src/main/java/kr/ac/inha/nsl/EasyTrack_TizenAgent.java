@@ -17,15 +17,14 @@ import com.samsung.android.sdk.accessory.SAAgent;
 import com.samsung.android.sdk.accessory.SAPeerAgent;
 import com.samsung.android.sdk.accessory.SASocket;
 
-public class EasyTrack_AndroidSAAAgent extends SAAgent {
-    static final String TAG = "EasyTrack_AndroidSAAAgent";
-    private static final Class<ServiceConnection> SASOCKET_CLASS = ServiceConnection.class;
+public class EasyTrack_TizenAgent extends SAAgent {
+    static final String TAG = "EasyTrack_TizenAgent";
     private final IBinder mBinder = new LocalBinder();
     private ServiceConnection mConnectionHandler;
     private Handler mHandler = new Handler();
 
-    public EasyTrack_AndroidSAAAgent() {
-        super(TAG, SASOCKET_CLASS);
+    protected EasyTrack_TizenAgent() {
+        super(TAG, ServiceConnection.class);
     }
 
     @Override
@@ -137,8 +136,8 @@ public class EasyTrack_AndroidSAAAgent extends SAAgent {
     }
 
     class LocalBinder extends Binder {
-        EasyTrack_AndroidSAAAgent getService() {
-            return EasyTrack_AndroidSAAAgent.this;
+        EasyTrack_TizenAgent getService() {
+            return EasyTrack_TizenAgent.this;
         }
     }
 
@@ -162,7 +161,6 @@ public class EasyTrack_AndroidSAAAgent extends SAAgent {
     public boolean closeConnection() {
         if (mConnectionHandler != null) {
             mConnectionHandler.close();
-            Log.e("CLOSED", "CLOSED");
             mConnectionHandler = null;
             return true;
         } else {
@@ -188,7 +186,7 @@ public class EasyTrack_AndroidSAAAgent extends SAAgent {
 
     public void sendResultBroadcast(String... args) {
         Intent intent = new Intent();
-        intent.setAction("kr.ac.inha.nsl.EasyTrack_AndroidSAAAgent");
+        intent.setAction("kr.ac.inha.nsl.EasyTrack_TizenAgent");
         if (args.length > 0) {
             intent.putStringArrayListExtra("args", new ArrayList<>(Arrays.asList(args)));
             sendBroadcast(intent);
