@@ -17,13 +17,13 @@ import com.samsung.android.sdk.accessory.SAAgent;
 import com.samsung.android.sdk.accessory.SAPeerAgent;
 import com.samsung.android.sdk.accessory.SASocket;
 
-public class EasyTrack_TizenAgent extends SAAgent {
-    static final String TAG = "EasyTrack_TizenAgent";
+public class TizenAgentService extends SAAgent {
+    static final String TAG = "EasyTrack_SAAgent";
     private final IBinder mBinder = new LocalBinder();
     private ServiceConnection mConnectionHandler;
     private Handler mHandler = new Handler();
 
-    protected EasyTrack_TizenAgent() {
+    protected TizenAgentService() {
         super(TAG, ServiceConnection.class);
     }
 
@@ -119,8 +119,9 @@ public class EasyTrack_TizenAgent extends SAAgent {
 
         @Override
         public void onReceive(int channelId, byte[] data) {
+            //noinspection StatementWithEmptyBody
             if (data[0] == MessagingConstants.RES_OK) {
-                Tools.saveSensorRecord(data);
+                // TODO: Tools.saveNumericData(data);
                 //sendResultBroadcast("log", "RECV_DATA: ", String.format(Locale.US, "SENS=%d DLEN=%d", data[1], data.length - 14));
             } else if (data[0] == MessagingConstants.RES_FAIL)
                 sendResultBroadcast("log", "RECV_DATA: ", "RES SENSOR FAIL (UNAVAILABLE)");
@@ -136,8 +137,8 @@ public class EasyTrack_TizenAgent extends SAAgent {
     }
 
     class LocalBinder extends Binder {
-        EasyTrack_TizenAgent getService() {
-            return EasyTrack_TizenAgent.this;
+        TizenAgentService getService() {
+            return TizenAgentService.this;
         }
     }
 
@@ -145,6 +146,7 @@ public class EasyTrack_TizenAgent extends SAAgent {
         findPeerAgents();
     }
 
+    @SuppressWarnings("unused")
     public synchronized boolean sendData(final byte[] data) {
         boolean retVal = false;
         if (mConnectionHandler != null) {
@@ -186,7 +188,7 @@ public class EasyTrack_TizenAgent extends SAAgent {
 
     public void sendResultBroadcast(String... args) {
         Intent intent = new Intent();
-        intent.setAction("kr.ac.inha.nsl.EasyTrack_TizenAgent");
+        intent.setAction("kr.ac.inha.nsl.TizenAgentService");
         if (args.length > 0) {
             intent.putStringArrayListExtra("args", new ArrayList<>(Arrays.asList(args)));
             sendBroadcast(intent);

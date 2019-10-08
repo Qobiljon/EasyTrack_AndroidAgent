@@ -2,84 +2,52 @@ package kr.ac.inha.nsl;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ServiceConnection;
 import android.content.SharedPreferences;
-import android.hardware.Sensor;
-import android.hardware.SensorEvent;
-import android.hardware.SensorEventListener;
-import android.hardware.SensorManager;
-import android.hardware.TriggerEvent;
-import android.hardware.TriggerEventListener;
 import android.os.Bundle;
-import android.os.FileObserver;
 import android.os.IBinder;
-import android.os.Looper;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
-import android.widget.Toast;
 
-import org.apache.http.HttpResponse;
-import org.apache.http.NameValuePair;
-import org.apache.http.message.BasicNameValuePair;
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
-
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.net.HttpURLConnection;
-import java.util.ArrayList;
-import java.util.Calendar;
-import java.util.Collections;
-import java.util.List;
 import java.util.Locale;
+
+import static kr.ac.inha.nsl.AuthenticationActivity.KEY_USERNAME;
+import static kr.ac.inha.nsl.AuthenticationActivity.KEY_PASSWORD;
 
 public class MainActivity extends Activity {
 
     // region Variable
-    private TextView filesCountTextView;
+    private int logLinesCount;
+
+    // UI elements
     private TextView logEditText;
     private Button startDataCollectionButton;
     private Button stopDataCollectionButton;
     private Button uploadSensorDataButton;
-    private FileObserver filesCounterObserver;
-    private int filesCount;
-    private int logLinesCount;
-    private FileWriter logWriter;
-    private String openLogWriterStamp;
 
-    private SensorManager sensorManager;
-    private SensorEventListener sensorEventListener;
-
+    // Threads
     private Thread submitDataThread;
     private StoppableRunnable submitDataRunnable;
+    private Thread sampleCounterThread;
+    private StoppableRunnable sampleCounterRunnable;
 
-    private ConsumerServiceReceiver receiver;
-    private static EasyTrack_TizenAgent mEasyTrackAndroidAgent;
-    private static boolean mIsBound = false;
-    private TextView tvStatus;
-    @SuppressLint("SetTextI18n")
-    private final ServiceConnection mConnection = new ServiceConnection() {
-        @Override
-        public void onServiceConnected(ComponentName className, IBinder service) {
-            mEasyTrackAndroidAgent = ((EasyTrack_TizenAgent.LocalBinder) service).getService();
-            tvStatus.setText("Service connected");
-        }
+    // Tizen-service related variables
+    private TizenAgentService tizenAgentService;
+    private TizenBroadcastReceiver tizenBroadcastReceiver;
+    private ServiceConnection tizenServiceConnection;
+    private boolean tizenServiceBound = false;
 
-        @Override
-        public void onServiceDisconnected(ComponentName className) {
-            mEasyTrackAndroidAgent = null;
-            mIsBound = false;
-            tvStatus.setText("Service disconnected");
-        }
-    };
+    // Data-collector service related variables
+    private DataCollectorBroadcastReceiver dataCollectorBroadcastReceiver;
+    private ServiceConnection dataCollectorServiceConnection;
+    private boolean dataCollectorServiceBound = false;
     // endregion
 
     // region Override
@@ -88,166 +56,24 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        logEditText = findViewById(R.id.logTextView);
-        filesCountTextView = findViewById(R.id.filesCountTextView);
+        Tools.cleanDb();
+
         startDataCollectionButton = findViewById(R.id.startDataCollectionButton);
         stopDataCollectionButton = findViewById(R.id.stopDataCollectionButton);
         uploadSensorDataButton = findViewById(R.id.uploadSensorDataButton);
+        logEditText = findViewById(R.id.logTextView);
+
         logLinesCount = 0;
+        uploadSensorDataButton.setText(getString(R.string.upload_sensor_data, 0));
 
         TextView usernameTextView = findViewById(R.id.usernameTextView);
         usernameTextView.setText(String.format("User: %s", Tools.prefs.getString("username", null)));
-
-        initDataSources();
-
-        this.tvStatus = findViewById(R.id.statusTextView);
-
-        // Bind service
-        Intent intent = new Intent(this, EasyTrack_TizenAgent.class);
-        mIsBound = bindService(intent, mConnection, Context.BIND_AUTO_CREATE);
-
-        receiver = new ConsumerServiceReceiver();
-
-        IntentFilter filter = new IntentFilter();
-        filter.addAction("kr.ac.inha.nsl.Tizen_SAP_Agent");
-        registerReceiver(receiver, filter);
-
-        if (mIsBound && mEasyTrackAndroidAgent != null)
-            mEasyTrackAndroidAgent.findPeers();
-    }
-
-    private void initDataSources() {
-        sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
-        sensorEventListener = new SensorEventListener() {
-            @Override
-            public void onSensorChanged(SensorEvent event) {
-                try {
-                    StringBuilder sb = new StringBuilder("smartphone-android,");
-                    sb.append(Tools.LAST_REBOOT_TIMESTAMP + (int) (event.timestamp / 1000000)).append(',');
-                    sb.append(event.sensor.getType()).append(',');
-                    sb.append(event.sensor.getName()).append(',');
-                    sb.append(event.accuracy).append(',');
-                    for (float val : event.values)
-                        sb.append(val).append(',');
-                    sb.deleteCharAt(sb.length() - 1);
-
-                    checkUpdateCurrentLogWriter();
-                    if (logWriter != null) {
-                        logWriter.flush();
-                        logWriter.write(String.format("%s%n", sb.toString()));
-                    }
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            }
-
-            @Override
-            public void onAccuracyChanged(Sensor sensor, int accuracy) {
-
-            }
-        };
-
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    List<NameValuePair> params = new ArrayList<>();
-                    params.add(new BasicNameValuePair("username", Tools.prefs.getString("username", null)));
-                    params.add(new BasicNameValuePair("password", Tools.prefs.getString("password", null)));
-                    params.add(new BasicNameValuePair("device", getString(R.string.device_as_data_source)));
-                    HttpResponse response = Tools.post(Tools.API_FETCH_CAMPAIGN_SETTINGS, params, null);
-                    if (response.getStatusLine().getStatusCode() == HttpURLConnection.HTTP_OK) {
-                        JSONObject result = new JSONObject(Tools.inputStreamToString(response.getEntity().getContent()));
-                        if (result.has("result") && result.getInt("result") == ServerResult.OK) {
-                            JSONObject campaign_settings = result.getJSONObject("campaign_settings");
-                            SharedPreferences.Editor editor = Tools.prefs.edit();
-                            editor.putInt("campaign_id", campaign_settings.getInt("id"));
-                            editor.putString("campaign_owner", campaign_settings.getString("owner_username"));
-                            editor.putString("campaign_name", campaign_settings.getString("name"));
-                            editor.putInt("campaign_start_date", campaign_settings.getInt("start_date"));
-                            editor.putInt("campaign_end_date", campaign_settings.getInt("end_date"));
-                            editor.putString("campaign_description", campaign_settings.getString("description"));
-                            editor.apply();
-
-                            int numOfSetUpDataSources = 0;
-                            JSONArray data_sources = campaign_settings.getJSONArray("data_sources");
-                            for (int n = 0; n < data_sources.length(); n++) {
-                                JSONObject data_source = data_sources.getJSONObject(0);
-                                int data_source_id = data_source.getInt("source_id");
-                                int data_rate = data_source.getInt("data_rate");
-
-                                if (sensorManager.getDefaultSensor(data_source_id) != null) {
-                                    Sensor sensor = sensorManager.getDefaultSensor(data_source_id);
-                                    sensorManager.registerListener(sensorEventListener, sensor, data_rate * 1000);
-                                    sensorManager.requestTriggerSensor(new TriggerEventListener() {
-                                        @Override
-                                        public void onTrigger(TriggerEvent event) {
-                                            Log.e("EVENT", event.sensor.getName() + " has been triggered");
-                                        }
-                                    }, sensor);
-                                    numOfSetUpDataSources++;
-                                }
-                            }
-
-                            Looper.prepare();
-                            Toast.makeText(MainActivity.this, "Campaign settings loaded!", Toast.LENGTH_SHORT).show();
-                            log(String.format(Locale.getDefault(), "Campaign settings loaded! (%d data sources have been set up)", numOfSetUpDataSources));
-                        } else {
-                            throw new JSONException("Parameter 'result' wasn't in response json");
-                        }
-                    } else
-                        throw new IOException("HTTP error while sending a post request for autentication");
-                } catch (IOException | JSONException e) {
-                    e.printStackTrace();
-                }
-            }
-        }).start();
-    }
-
-    @Override
-    protected void onStart() {
-        if (filesCounterObserver != null)
-            filesCounterObserver.stopWatching();
-
-        filesCount = Tools.countSensorDataFiles();
-        filesCountTextView.setText(String.format(Locale.US, "FILES: %d", filesCount));
-        filesCounterObserver = new FileObserver(Tools.APP_DIR) {
-            @Override
-            public void onEvent(int event, String path) {
-                if (event == FileObserver.CREATE) {
-                    filesCountTextView.setText(String.format(Locale.US, "FILES: %d", ++filesCount));
-                } else if (event == FileObserver.DELETE) {
-                    filesCountTextView.setText(String.format(Locale.US, "FILES: %d", --filesCount));
-                }
-            }
-        };
-        filesCounterObserver.startWatching();
-
-        super.onStart();
-    }
-
-    @Override
-    protected void onStop() {
-        if (filesCounterObserver != null)
-            filesCounterObserver.stopWatching();
-        filesCounterObserver = null;
-        super.onStop();
     }
 
     @Override
     protected void onDestroy() {
-        unregisterReceiver(receiver);
-
-        if (mIsBound && mEasyTrackAndroidAgent != null && !mEasyTrackAndroidAgent.closeConnection()) {
-            tvStatus.setText(getString(R.string.disconnected));
-            Toast.makeText(this, R.string.ConnectionDoesNotExists, Toast.LENGTH_SHORT).show();
-        }
-
-        if (mIsBound) {
-            unbindService(mConnection);
-            mIsBound = false;
-        }
-
+        // stopTizenService();
+        stopSamplesCounterThread();
         super.onDestroy();
     }
 
@@ -255,98 +81,21 @@ public class MainActivity extends Activity {
     public void onBackPressed() {
         Tools.hideApp(this);
     }
+
+    @Override
+    protected void onResume() {
+        startSamplesCounterThread();
+        super.onResume();
+    }
     // endregion
 
-    private void log(final String message) {
-        runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                if (logLinesCount == logEditText.getMaxLines())
-                    logEditText.setText(String.format(Locale.US, "%s%n%s", logEditText.getText().toString().substring(logEditText.getText().toString().indexOf('\n') + 1), message));
-                else {
-                    logEditText.setText(String.format("%s%n%s", logEditText.getText(), message));
-                    logLinesCount++;
-                }
-            }
-        });
-    }
 
-    private void checkUpdateCurrentLogWriter() throws IOException {
-        Calendar nowTimeStamp = Calendar.getInstance();
-        nowTimeStamp.set(nowTimeStamp.get(Calendar.YEAR), nowTimeStamp.get(Calendar.MONTH), nowTimeStamp.get(Calendar.DAY_OF_MONTH), nowTimeStamp.get(Calendar.HOUR_OF_DAY), nowTimeStamp.get(Calendar.MINUTE), 0);
-        nowTimeStamp.set(Calendar.MILLISECOND, 0);
-        String nowStamp = String.valueOf(nowTimeStamp.getTimeInMillis() / 10000);
-
-        if (logWriter == null) {
-            this.openLogWriterStamp = nowStamp;
-            String filePath = String.format(Locale.US, "%s%s%s.csv", Tools.APP_DIR, File.separator, nowStamp);
-            logWriter = new FileWriter(filePath, true);
-
-            log("Data-log file created/attached");
-            Tools.sendHeartBeatMessage();
-        } else if (!nowStamp.equals(openLogWriterStamp)) {
-            logWriter.flush();
-            logWriter.close();
-
-            openLogWriterStamp = nowStamp;
-            String filePath = String.format(Locale.US, "%s%s%s.csv", Tools.APP_DIR, File.separator, nowStamp);
-            logWriter = new FileWriter(filePath, false);
-
-            log("New data-log file created");
-            Tools.sendHeartBeatMessage();
-        }
-    }
-
-    public void startDataCollectionClick(View view) {
-        log("Sensor data collection started");
-
-        List<Sensor> deviceSensors = sensorManager.getSensorList(Sensor.TYPE_ALL);
-        for (Sensor sensor : deviceSensors) {
-            sensorManager.registerListener(sensorEventListener, sensor, SensorManager.SENSOR_DELAY_FASTEST);
-            sensorManager.requestTriggerSensor(new TriggerEventListener() {
-                @Override
-                public void onTrigger(TriggerEvent event) {
-                    Log.e("EVENT", event.sensor.getName() + " has been triggered");
-                }
-            }, sensor);
-        }
-        startDataCollectionButton.setClickable(false);
-        stopDataCollectionButton.setClickable(true);
-    }
-
-    public void stopDataCollectionClick(View view) {
-        List<Sensor> deviceSensors = sensorManager.getSensorList(Sensor.TYPE_ALL);
-        for (Sensor sensor : deviceSensors)
-            sensorManager.unregisterListener(sensorEventListener);
-        startDataCollectionButton.setClickable(true);
-        stopDataCollectionButton.setClickable(false);
-
-        log("Sensor data collection stopped");
-    }
-
-    public void startFilesCounterThread() {
-        if (filesCounterObserver != null)
-            filesCounterObserver.stopWatching();
-
-        filesCount = Tools.countSensorDataFiles();
-        filesCountTextView.setText(String.format(Locale.US, "FILES: %d", filesCount));
-        filesCounterObserver = new FileObserver(Tools.APP_DIR) {
-            @Override
-            public void onEvent(int event, String path) {
-                if (event == FileObserver.CREATE) {
-                    filesCountTextView.setText(String.format(Locale.US, "FILES: %d", ++filesCount));
-                } else if (event == FileObserver.DELETE) {
-                    filesCountTextView.setText(String.format(Locale.US, "FILES: %d", --filesCount));
-                }
-            }
-        };
-        filesCounterObserver.startWatching();
-    }
-
-    public void stopFilesCounterThread() {
-        if (filesCounterObserver != null)
-            filesCounterObserver.stopWatching();
-        filesCounterObserver = null;
+    public void logoutButtonClick(View view) {
+        SharedPreferences.Editor editor = Tools.prefs.edit();
+        editor.remove(KEY_USERNAME);
+        editor.remove(KEY_PASSWORD);
+        editor.apply();
+        finish();
     }
 
     public void uploadSensorDataClick(View view) {
@@ -363,63 +112,7 @@ public class MainActivity extends Activity {
                 @SuppressLint("SetTextI18n")
                 @Override
                 public void run() {
-                    stopFilesCounterThread();
-                    String[] files = Tools.getFiles(Tools.APP_DIR);
-                    if (files != null) {
-                        List<Long> fileNamesInLong = new ArrayList<>();
-                        for (String file : files) {
-                            if (!file.endsWith(".csv"))
-                                continue;
-                            String tmp = file.substring(file.lastIndexOf('/') + 1);
-                            fileNamesInLong.add(Long.parseLong(tmp.substring(0, tmp.lastIndexOf('.'))));
-                        }
-                        Collections.sort(fileNamesInLong);
-                        try {
-                            for (int n = 0; n < fileNamesInLong.size() - 1; n++) {
-                                if (this.terminate)
-                                    break;
-                                filesCountTextView.setText(String.format(Locale.US, "%d%% UPLOADED", (n + 1) * 100 / fileNamesInLong.size()));
-                                String filePath = String.format(Locale.US, "%s%s%s.csv", Tools.APP_DIR, File.separator, fileNamesInLong.get(n));
-                                List<NameValuePair> params = new ArrayList<>();
-                                params.add(new BasicNameValuePair("username", Tools.prefs.getString("username", null)));
-                                params.add(new BasicNameValuePair("password", Tools.prefs.getString("password", null)));
-                                File file = new File(filePath);
-                                HttpResponse response = Tools.post(Tools.API_SUBMIT_DATA, params, file);
-                                if (response.getStatusLine().getStatusCode() == HttpURLConnection.HTTP_OK) {
-                                    JSONObject result = new JSONObject(Tools.inputStreamToString(response.getEntity().getContent()));
-                                    if (result.has("result") && result.getInt("result") == ServerResult.OK) {
-                                        boolean deleted = file.delete();
-                                        Log.d("IO ACTION", String.format("File %s %s uploaded!", file.getName(), deleted ? "was" : "wasn't"));
-                                    } else
-                                        Log.e("UPLOAD ERROR", result.toString());
-                                } else {
-                                    Log.e("HTTP ERROR", response.getStatusLine().getReasonPhrase());
-                                }
-                            }
-                            log("Data uploaded on Server");
-                            filesCountTextView.setText("100%% UPLOADED");
-                            try {
-                                Thread.sleep(300);
-                            } catch (InterruptedException e) {
-                                e.printStackTrace();
-                            }
-                        } catch (IOException e) {
-                            e.printStackTrace();
-                            Looper.prepare();
-                            Toast.makeText(MainActivity.this, "Please check your connection first!", Toast.LENGTH_SHORT).show();
-                        } catch (JSONException e) {
-                            e.printStackTrace();
-                        }
-                    }
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            submitDataRunnable = null;
-                            submitDataThread = null;
-                            uploadSensorDataButton.setText(getString(R.string.upload_sensor_data));
-                        }
-                    });
-                    startFilesCounterThread();
+                    Tools.submitCollectedData();
                 }
             });
             submitDataThread.start();
@@ -427,12 +120,186 @@ public class MainActivity extends Activity {
         }
     }
 
-    public void logoutButtonClick(View view) {
-        SharedPreferences.Editor editor = Tools.prefs.edit();
-        editor.remove("username");
-        editor.remove("password");
-        editor.putBoolean("logged_in", false);
-        editor.apply();
-        finish();
+
+    private void log(final String message) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (logLinesCount == logEditText.getMaxLines())
+                    logEditText.setText(String.format(Locale.US, "%s%n%s", logEditText.getText().toString().substring(logEditText.getText().toString().indexOf('\n') + 1), message));
+                else {
+                    logEditText.setText(String.format("%s%n%s", logEditText.getText(), message));
+                    logLinesCount++;
+                }
+            }
+        });
+    }
+
+
+    public void startDataCollectionClick(View view) {
+        startDataCollectionService();
+        startDataCollectionButton.setClickable(false);
+        stopDataCollectionButton.setClickable(true);
+    }
+
+    public void stopDataCollectionClick(View view) {
+        stopDataCollectionService();
+        startDataCollectionButton.setClickable(true);
+        stopDataCollectionButton.setClickable(false);
+        log("Data collection campaign has terminated");
+    }
+
+    public void startSamplesCounterThread() {
+        stopSamplesCounterThread();
+
+        sampleCounterThread = new Thread(sampleCounterRunnable = new StoppableRunnable() {
+            @Override
+            public void run() {
+                while (!terminate) {
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            uploadSensorDataButton.setText(getString(R.string.upload_sensor_data, Tools.countSamples()));
+                        }
+                    });
+                    try {
+                        Thread.sleep(1000);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+        });
+        sampleCounterThread.start();
+    }
+
+    public void stopSamplesCounterThread() {
+        if (sampleCounterRunnable != null && !sampleCounterRunnable.terminate) {
+            sampleCounterRunnable.terminate = true;
+            try {
+                sampleCounterThread.join();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+
+    private void startTizenService() {
+        // Start service
+        Intent intent = new Intent(this, TizenAgentService.class);
+        startService(intent);
+
+        // Bind service
+        tizenServiceConnection = new ServiceConnection() {
+            @Override
+            public void onServiceConnected(ComponentName name, IBinder service) {
+                tizenAgentService = ((TizenAgentService.LocalBinder) service).getService();
+                tizenServiceBound = true;
+                Log.e("MainActivity", "onServiceConnected: tizenServiceConnection");
+            }
+
+            @Override
+            public void onServiceDisconnected(ComponentName name) {
+                tizenAgentService = null;
+                tizenServiceBound = false;
+                Log.e("MainActivity", "onServiceDisconnected: tizenServiceConnection");
+            }
+        };
+        tizenServiceBound = bindService(intent, tizenServiceConnection, Context.BIND_AUTO_CREATE);
+
+        // Set up receiver
+        tizenBroadcastReceiver = new TizenBroadcastReceiver();
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(TizenBroadcastReceiver.PACKAGE);
+        registerReceiver(tizenBroadcastReceiver, filter);
+
+        // Find peers & connect
+        if (tizenServiceBound && tizenAgentService != null)
+            tizenAgentService.findPeers();
+    }
+
+    private void stopTizenService() {
+        // Unregister receiver
+        unregisterReceiver(tizenBroadcastReceiver);
+
+        // Disconnect from service
+        if (tizenServiceBound && tizenAgentService != null && !tizenAgentService.closeConnection())
+            Log.e("MainActivity", "stopTizenService: closeConnection");
+
+        // Unbind the service
+        if (tizenServiceBound) {
+            unbindService(tizenServiceConnection);
+            tizenServiceBound = false;
+        }
+
+        // Stop the service
+        Intent intent = new Intent(this, DataCollectorService.class);
+        stopService(intent);
+    }
+
+    private void startDataCollectionService() {
+        // Start service
+        Intent intent = new Intent(this, DataCollectorService.class);
+        startService(intent);
+
+        // Bind service
+        dataCollectorServiceConnection = new ServiceConnection() {
+            @Override
+            public void onServiceConnected(ComponentName name, IBinder service) {
+                dataCollectorServiceBound = true;
+                Log.e("MainActivity", "onServiceConnected: dataCollectorServiceConnection");
+            }
+
+            @Override
+            public void onServiceDisconnected(ComponentName name) {
+                dataCollectorServiceBound = false;
+                Log.e("MainActivity", "onServiceDisconnected: dataCollectorServiceConnection");
+            }
+        };
+        dataCollectorServiceBound = bindService(intent, dataCollectorServiceConnection, Context.BIND_AUTO_CREATE);
+
+        // Set up receiver
+        dataCollectorBroadcastReceiver = new DataCollectorBroadcastReceiver();
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(DataCollectorBroadcastReceiver.PACKAGE);
+        registerReceiver(dataCollectorBroadcastReceiver, filter);
+    }
+
+    private void stopDataCollectionService() {
+        // Unregister receiver
+        unregisterReceiver(dataCollectorBroadcastReceiver);
+
+        // Unbind the service
+        if (dataCollectorServiceBound) {
+            unbindService(dataCollectorServiceConnection);
+            dataCollectorServiceBound = false;
+        }
+
+        // Stop the service
+        Intent intent = new Intent(this, DataCollectorService.class);
+        stopService(intent);
+    }
+
+
+    class TizenBroadcastReceiver extends BroadcastReceiver {
+        static final String PACKAGE = "kr.ac.nsl.inha.MainActivity$TizenBroadcastReceiver";
+
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            Log.e("TizenReceiver", "onReceive: TizenBroadcastReceiver");
+        }
+    }
+
+    class DataCollectorBroadcastReceiver extends BroadcastReceiver {
+        static final String PACKAGE = "kr.ac.nsl.inha.MainActivity$DataCollectorBroadcastReceiver";
+
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (intent.hasExtra("log_message"))
+                log(intent.getStringExtra("log_message"));
+            else
+                Log.e("TizenReceiver", "onReceive: DataCollectorBroadcastReceiver");
+        }
     }
 }

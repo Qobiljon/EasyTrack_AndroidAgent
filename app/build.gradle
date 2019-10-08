@@ -6,7 +6,7 @@ android {
     useLibrary 'org.apache.http.legacy'
     defaultConfig {
         applicationId "kr.ac.inha.nsl.EasyTrack"
-        minSdkVersion 19
+        minSdkVersion 21
         targetSdkVersion 28
         versionCode 4
         versionName '2.0.2'
@@ -23,10 +23,11 @@ android {
 
 dependencies {
     implementation fileTree(include: ['*.jar'], dir: 'libs')
-    implementation 'com.android.support:appcompat-v7:28.0.0'
+    implementation 'androidx.appcompat:appcompat:1.1.0'
     implementation 'com.opencsv:opencsv:3.9'
-    implementation 'com.android.support.constraint:constraint-layout:1.1.3'
+    implementation 'androidx.constraintlayout:constraintlayout:1.1.3'
     implementation 'org.apache.httpcomponents:httpclient-android:4.3.5.1'
+    implementation 'com.google.android.gms:play-services-location:17.0.0'
     implementation('org.apache.httpcomponents:httpmime:4.3') {
         exclude module: "httpclient"
     }

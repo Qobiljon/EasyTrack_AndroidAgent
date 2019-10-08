@@ -3,13 +3,28 @@
     xmlns:tools="http://schemas.android.com/tools"
     package="kr.ac.inha.nsl">
 
-    <uses-permission android:name="com.samsung.android.providers.context.permission.WRITE_USE_APP_FEATURE_SURVEY" />
-    <uses-permission android:name="com.samsung.wmanager.ENABLE_NOTIFICATION" />
     <uses-permission android:name="com.samsung.WATCH_APP_TYPE.Companion" />
+    <uses-permission android:name="com.samsung.wmanager.ENABLE_NOTIFICATION" />
+    <uses-permission android:name="com.samsung.accessory.permission.ACCESSORY_FRAMEWORK" />
+    <uses-permission android:name="com.samsung.android.providers.context.permission.WRITE_USE_APP_FEATURE_SURVEY" />
+
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
     <uses-permission android:name="android.permission.INTERNET" />
+
     <uses-permission android:name="android.permission.BLUETOOTH" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
-    <uses-permission android:name="com.samsung.accessory.permission.ACCESSORY_FRAMEWORK" />
+
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <uses-permission android:name="com.google.android.gms.permission.ACTIVITY_RECOGNITION" />
+
+    <uses-permission android:name="android.permission.BODY_SENSORS" />
+
+    <uses-permission
+        android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
 
     <application
         android:allowBackup="true"
@@ -56,10 +71,19 @@
             </intent-filter>
         </receiver>
 
-        <receiver android:name=".ConsumerServiceReceiver" />
+        <receiver android:name=".MainActivity$TizenBroadcastReceiver" />
+        <receiver android:name=".MainActivity$DataCollectorBroadcastReceiver" />
 
         <service
-            android:name=".EasyTrack_TizenAgent"
+            android:name=".TizenAgentService"
+            android:enabled="true" />
+
+        <service
+            android:name=".DataCollectorService"
+            android:enabled="true" />
+
+        <service
+            android:name=".MyActivityRecognitionService"
             android:enabled="true" />
 
         <uses-library
