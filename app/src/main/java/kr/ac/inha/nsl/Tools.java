@@ -3,87 +3,69 @@ package kr.ac.inha.nsl;
 import android.Manifest;
 import android.app.Activity;
 import android.app.AppOpsManager;
+import android.app.usage.UsageStats;
+import android.app.usage.UsageStatsManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
-import android.os.SystemClock;
+import android.net.ConnectivityManager;
+import android.os.Build;
 
-import androidx.annotation.Nullable;
+import androidx.annotation.NonNull;
 import androidx.core.app.ActivityCompat;
 
+import android.provider.Settings;
 import android.text.TextUtils;
 import android.util.Log;
+import android.view.WindowManager;
 
-import org.apache.http.HttpEntity;
-import org.apache.http.HttpResponse;
-import org.apache.http.NameValuePair;
-import org.apache.http.client.HttpClient;
-import org.apache.http.client.methods.HttpPost;
-import org.apache.http.entity.mime.HttpMultipartMode;
-import org.apache.http.entity.mime.MultipartEntityBuilder;
-import org.apache.http.entity.mime.content.FileBody;
-import org.apache.http.impl.client.DefaultHttpClient;
-import org.apache.http.message.BasicNameValuePair;
-
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
+import java.io.OutputStreamWriter;
+import java.net.InetAddress;
 import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Date;
 import java.util.List;
 import java.util.Locale;
-import java.util.concurrent.Executors;
 
-import static android.content.Context.MODE_PRIVATE;
-import static java.lang.System.currentTimeMillis;
-
-public class Tools {
-    // region Variables
+class Tools {
     static SharedPreferences prefs;
     private static SQLiteDatabase db;
     static String PACKAGE_NAME;
-    // endregion
+    static File locationDataFile;
+    static File activityRecognitionDataFile;
+    private static UsageStatsManager usageStatsManager;
+    private static ConnectivityManager connectivityManager;
 
-    // region Constant values
-    static final long LAST_REBOOT_TIMESTAMP = currentTimeMillis() - SystemClock.elapsedRealtime();
-
-    @SuppressWarnings("unused")
-    static final short CHANNEL_ID = 104;
-    static final String API_REGISTER = "register";
-    @SuppressWarnings("unused")
-    static final String API_UNREGISTER = "unregister";
-    static final String API_AUTHENTICATE = "authenticate";
-    static final String API_FETCH_CAMPAIGN_SETTINGS = "get_campaign_settings";
-    @SuppressWarnings("unused")
-    static final String API_SUBMIT_DATA = "submit_data";
-    @SuppressWarnings("unused")
-    static final String API_NOTIFY = "notify";
-    private static final String API_SUBMIT_HEARTBEAT = "heartbeat";
-    // endregion
 
     static void init(Context context) {
-        db = context.openOrCreateDatabase("EasyTrack_TizenAgent_LocalDB", MODE_PRIVATE, null);
+        db = context.openOrCreateDatabase("EasyTrack_TizenAgent_LocalDB", Context.MODE_PRIVATE, null);
         db.execSQL("CREATE TABLE IF NOT EXISTS SensorRecords(sensorId INT DEFAULT(0), timestamp BIGINT DEFAULT(0), accuracy FLOAT DEFAULT(0.0), data VARCHAR(164) DEFAULT(NULL));");
-        prefs = context.getSharedPreferences(context.getString(R.string.app_name), MODE_PRIVATE);
+        prefs = context.getSharedPreferences(context.getString(R.string.app_name), Context.MODE_PRIVATE);
         PACKAGE_NAME = context.getPackageName();
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1)
+            usageStatsManager = (UsageStatsManager) context.getSystemService(Context.USAGE_STATS_SERVICE);
+        connectivityManager = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
     }
 
-
-    static void exitApp(Activity activity) {
-        do {
-            Activity current = activity;
-            activity = activity.getParent();
-            current.finishAffinity();
-        } while (activity != null);
-        System.exit(0);
+    static void initDataCollectorService(final Activity activity) {
+        activity.stopService(new Intent(activity, DataCollectorService.class));
+        activity.startService(new Intent(activity, DataCollectorService.class));
     }
+
 
     static void hideApp(Activity activity) {
         Intent intent = new Intent(Intent.ACTION_MAIN);
@@ -91,6 +73,71 @@ public class Tools {
         activity.startActivity(intent);
     }
 
+
+    static void checkAndSendUsageAccessStats() {
+        if (usageStatsManager == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP_MR1)
+            return;
+
+        long lastSavedTimestamp = 0; // TODO fill this properly
+
+        Calendar fromCal = Calendar.getInstance(Locale.getDefault());
+        if (lastSavedTimestamp == -1)
+            fromCal.add(Calendar.YEAR, -1);
+        else
+            fromCal.setTime(new Date(lastSavedTimestamp));
+        Calendar tillCal = Calendar.getInstance(Locale.getDefault());
+        tillCal.set(Calendar.MILLISECOND, 0);
+
+        StringBuilder sb = new StringBuilder();
+        for (UsageStats stats : usageStatsManager.queryUsageStats(UsageStatsManager.INTERVAL_BEST, fromCal.getTimeInMillis(), System.currentTimeMillis()))
+            if (stats.getPackageName().equals(PACKAGE_NAME))
+                if (sb.length() == 0)
+                    sb.append(String.format(
+                            Locale.getDefault(),
+                            "%d %d",
+                            stats.getLastTimeUsed() / 1000,
+                            stats.getTotalTimeInForeground() / 1000
+                    ));
+                else
+                    sb.append(String.format(
+                            Locale.getDefault(),
+                            ",%d %d",
+                            stats.getLastTimeUsed() / 1000,
+                            stats.getTotalTimeInForeground() / 1000
+                    ));
+
+        if (sb.length() > 0) {
+            // TODO: send here
+        }
+    }
+
+    static synchronized void checkAndSendLocationData() throws IOException {
+        if (locationDataFile == null)
+            return;
+
+        String locationData = readLocationData();
+        if (locationData.length() == 0)
+            return;
+
+        if (!Character.isDigit(locationData.charAt(locationData.length() - 1)))
+            locationData = locationData.substring(0, locationData.length() - 1);
+
+        // TODO: send here
+    }
+
+    static void checkAndSendActivityData() throws IOException {
+        if (activityRecognitionDataFile == null)
+            return;
+
+        String activityRecognitionData = readActivityRecognitionData();
+        if (activityRecognitionData.length() == 0)
+            return;
+
+        if (!Character.isDigit(activityRecognitionData.charAt(activityRecognitionData.length() - 1)))
+            activityRecognitionData = activityRecognitionData.substring(0, activityRecognitionData.length() - 1);
+
+        // TODO: send here
+    }
 
     static void saveNumericData(int sensorId, long timestamp, float accuracy, Number... data) {
         StringBuilder sb = new StringBuilder();
@@ -193,155 +240,151 @@ public class Tools {
     }
 
 
+    static boolean isGPSDeviceEnabled(Context context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.KITKAT)
+            return false;
+
+        try {
+            return Settings.Secure.getInt(context.getContentResolver(), Settings.Secure.LOCATION_MODE) != Settings.Secure.LOCATION_MODE_OFF;
+        } catch (Settings.SettingNotFoundException e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
     static boolean isLocationPermissionDenied(Context context) {
         return ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED || ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED;
     }
 
-    static boolean isUsageAccessDenied(Context context) {
-        try {
-            PackageManager packageManager = context.getPackageManager();
-            ApplicationInfo applicationInfo = packageManager.getApplicationInfo(context.getPackageName(), 0);
-            AppOpsManager appOpsManager = (AppOpsManager) context.getSystemService(Context.APP_OPS_SERVICE);
-            int mode = appOpsManager.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, applicationInfo.uid, applicationInfo.packageName);
-            return (mode != AppOpsManager.MODE_ALLOWED);
-        } catch (PackageManager.NameNotFoundException e) {
+    static boolean isUsageAccessDenied(@NonNull final Context context) {
+        // Usage Stats is theoretically available on API v19+, but official/reliable support starts with API v21.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP_MR1)
             return true;
+
+        final AppOpsManager appOpsManager = (AppOpsManager) context.getSystemService(Context.APP_OPS_SERVICE);
+
+        if (appOpsManager == null)
+            return true;
+
+        final int mode = appOpsManager.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, android.os.Process.myUid(), context.getPackageName());
+        if (mode != AppOpsManager.MODE_ALLOWED) {
+            return true;
+        }
+
+        // Verify that access is possible. Some devices "lie" and return MODE_ALLOWED even when it's not.
+        final long now = System.currentTimeMillis();
+        final UsageStatsManager mUsageStatsManager = (UsageStatsManager) context.getSystemService(Context.USAGE_STATS_SERVICE);
+        final List<UsageStats> stats;
+        if (mUsageStatsManager == null)
+            return true;
+        stats = mUsageStatsManager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, now - 1000 * 10, now);
+        return !(stats != null && !stats.isEmpty());
+    }
+
+    static boolean isNetworkAvailable() {
+        try {
+            return !InetAddress.getByName("google.com").toString().equals("");
+        } catch (Exception e) {
+            return false;
         }
     }
 
-    static HttpResponse post(String api, List<NameValuePair> parameters, @Nullable File file) throws IOException {
-        final String SERVER_URL = "http://165.246.43.97:36012";
 
-        HttpPost httppost = new HttpPost(String.format(Locale.US, "%s/%s", SERVER_URL, api));
-        HttpClient httpclient = new DefaultHttpClient();
-
-        MultipartEntityBuilder entityBuilder = MultipartEntityBuilder.create();
-        entityBuilder.setMode(HttpMultipartMode.STRICT);
-        for (NameValuePair pair : parameters)
-            entityBuilder.addTextBody(pair.getName(), pair.getValue());
-        if (file != null)
-            entityBuilder.addPart("file", new FileBody(file));
-        HttpEntity entity = entityBuilder.build();
-
-        httppost.setEntity(entity);
-        return httpclient.execute(httppost);
+    static synchronized void storeLocationData(long timestamp, double latitude, double longitude, double altitude) throws IOException {
+        FileWriter writer = new FileWriter(locationDataFile, true);
+        writer.write(String.format(
+                Locale.getDefault(),
+                "%d %f %f %f\n",
+                timestamp / 1000,
+                latitude,
+                longitude,
+                altitude
+        ));
+        writer.close();
     }
 
-    static String inputStreamToString(InputStream is) throws IOException {
-        InputStreamReader reader = new InputStreamReader(is);
-        StringBuilder sb = new StringBuilder();
+    private static synchronized String readLocationData() throws IOException {
+        StringBuilder result = new StringBuilder();
 
+        FileReader reader = new FileReader(locationDataFile);
         char[] buf = new char[128];
         int read;
         while ((read = reader.read(buf)) > 0)
-            sb.append(buf, 0, read);
+            result.append(buf, 0, read);
 
-        reader.close();
-        return sb.toString();
+        return result.toString();
     }
 
-    static void sendHeartBeatMessage() {
-        Executors.newCachedThreadPool().execute(new Runnable() {
-            @Override
-            public void run() {
-                List<NameValuePair> params = new ArrayList<>();
-                params.add(new BasicNameValuePair("username", Tools.prefs.getString("username", null)));
-                params.add(new BasicNameValuePair("password", Tools.prefs.getString("password", null)));
-                try {
-                    post(API_SUBMIT_HEARTBEAT, params, null);
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
+    static synchronized void storeActivityRecognitionData(long timestamp, String activity, float confidence) throws IOException {
+        FileWriter writer = new FileWriter(activityRecognitionDataFile, true);
+        writer.write(String.format(
+                Locale.getDefault(),
+                "%d %s %f\n",
+                timestamp / 1000,
+                activity,
+                confidence
+        ));
+        writer.close();
+    }
+
+    private static synchronized String readActivityRecognitionData() throws IOException {
+        StringBuilder result = new StringBuilder();
+
+        FileReader reader = new FileReader(activityRecognitionDataFile);
+        char[] buf = new char[128];
+        int read;
+        while ((read = reader.read(buf)) > 0)
+            result.append(buf, 0, read);
+
+        return result.toString();
+    }
+
+    private static void writeToFile(Context context, String fileName, String data) {
+        try {
+            FileOutputStream outputStream = context.openFileOutput(fileName, Context.MODE_PRIVATE);
+            OutputStreamWriter outputStreamWriter = new OutputStreamWriter(outputStream);
+            outputStreamWriter.write(data);
+            outputStreamWriter.close();
+            outputStream.close();
+        } catch (IOException e) {
+            Log.e("Exception", "File write failed: " + e.toString());
+        }
+    }
+
+    private static String readFromFile(Context context, String fileName) {
+        String ret = "[]";
+
+        try {
+            InputStream inputStream = context.openFileInput(fileName);
+
+            if (inputStream != null) {
+                InputStreamReader inputStreamReader = new InputStreamReader(inputStream);
+                BufferedReader bufferedReader = new BufferedReader(inputStreamReader);
+                String receiveString;
+                StringBuilder stringBuilder = new StringBuilder();
+
+                while ((receiveString = bufferedReader.readLine()) != null)
+                    stringBuilder.append(receiveString);
+
+                bufferedReader.close();
+                inputStream.close();
+                ret = stringBuilder.toString();
             }
-        });
-    }
-
-
-    // region Tizen-service-related utility methods
-    @SuppressWarnings("unused")
-    static float bytes2float(final byte[] data, final int startIndex) {
-        byte[] floatBytes = new byte[4];
-        System.arraycopy(data, startIndex, floatBytes, 0, 4);
-        return ByteBuffer.wrap(floatBytes).order(ByteOrder.LITTLE_ENDIAN).getFloat();
-    }
-
-    @SuppressWarnings("unused")
-    private static int bytes2int(final byte[] data) {
-        byte[] intBytes = new byte[4];
-        System.arraycopy(data, 10, intBytes, 0, 4);
-        return ByteBuffer.wrap(intBytes).order(ByteOrder.LITTLE_ENDIAN).getInt();
-    }
-
-    @SuppressWarnings("unused")
-    private static long bytes2long(final byte[] data) {
-        byte[] longBytes = new byte[8];
-        System.arraycopy(data, 2, longBytes, 0, 8);
-        return ByteBuffer.wrap(longBytes).order(ByteOrder.LITTLE_ENDIAN).getLong();
-    }
-
-    @SuppressWarnings("unused")
-    static byte[] short2bytes(final short value) {
-        return new byte[]{(byte) value, (byte) (value >> 8)};
-    }
-
-    private static String[] bytes2hexStrings(final byte[] bytes, final int offset) {
-        String[] res = new String[bytes.length - offset];
-        for (int n = offset; n < bytes.length; n++) {
-            int intVal = bytes[n] & 0xff;
-            res[n - offset] = "";
-            if (intVal < 0x10)
-                res[n - offset] += "0";
-            res[n - offset] += Integer.toHexString(intVal).toUpperCase();
+        } catch (FileNotFoundException e) {
+            Log.e("Exception", "File not found: " + e.toString());
+        } catch (IOException e) {
+            Log.e("Exception", "Can not read file: " + e.toString());
         }
-        return res;
+
+        return ret;
     }
 
-    private static String[] bytes2hexStrings(final byte[] bytes) {
-        return bytes2hexStrings(bytes, 0);
+    static void disableTouch(Activity activity) {
+        activity.getWindow().setFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE, WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE);
     }
 
-    @SuppressWarnings("unused")
-    public static String bytes2hexString(final byte[] bytes, final int offset) {
-        return TextUtils.join(" ", bytes2hexStrings(bytes, offset));
-    }
-
-    @SuppressWarnings("unused")
-    public static String bytes2hexString(final byte[] bytes) {
-        return TextUtils.join(" ", bytes2hexStrings(bytes));
-    }
-    // endregion
-}
-
-
-class ServerResult {
-    static final short OK = 0;
-    @SuppressWarnings("unused")
-    static final short FAIL = 1;
-    @SuppressWarnings("unused")
-    static final short BAD_JSON_PARAMETERS = 2;
-    static final short USERNAME_TAKEN = 3;
-    static final short TOO_SHORT_PASSWORD = 4;
-    static final short TOO_LONG_PASSWORD = 5;
-    @SuppressWarnings("unused")
-    static final short USER_DOES_NOT_EXIST = 6;
-    @SuppressWarnings("unused")
-    static final short BAD_PASSWORD = 7;
-}
-
-class MessagingConstants {
-    static final byte RES_OK = 0x01;
-    static final byte RES_FAIL = 0x02;
-
-    @SuppressWarnings("unused")
-    static String name4constant(final byte value) {
-        switch (value) {
-            case RES_OK:
-                return "SUCCESSFUL";
-            case RES_FAIL:
-                return "FAILURE";
-            default:
-                return null;
-        }
+    static void enableTouch(Activity activity) {
+        activity.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE);
     }
 }
 
@@ -349,6 +392,7 @@ class DataCollectorServiceReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context context, Intent intent) {
         ArrayList<String> args = intent.getStringArrayListExtra("args");
+        assert args != null;
         String action = args.remove(0);
 
         if (action.equals("updateTextView"))
@@ -360,12 +404,4 @@ class DataCollectorServiceReceiver extends BroadcastReceiver {
 
 abstract class StoppableRunnable implements Runnable {
     boolean terminate = false;
-}
-
-abstract class RunnableWithArguments implements Runnable {
-    Object[] args;
-
-    RunnableWithArguments(Object... args) {
-        this.args = args;
-    }
 }

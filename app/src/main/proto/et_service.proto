@@ -1,0 +1,200 @@
+syntax = "proto3";
+option java_package = "inha.nslab.easytrack";
+
+message DefaultResponseMessage {
+    bool doneSuccessfully = 1;
+}
+
+message LoginWithGoogleIdTokenRequestMessage {
+    string idToken = 1;
+}
+
+message DashboardLoginWithEmailRequestMessage {
+    string email = 1;
+    string name = 2;
+    string dashboardKey = 3;
+}
+
+message LoginResponseMessage {
+    bool doneSuccessfully = 1;
+    int32 userId = 2;
+}
+
+message RegisterCampaignRequestMessage {
+    int32 userId = 1;
+    string email = 2;
+    string name = 3;
+    string notes = 4;
+    string configJson = 5;
+}
+
+message RegisterCampaignResponseMessage {
+    bool doneSuccessfully = 1;
+    int32 campaignId = 2;
+}
+
+message RetrieveCampaignsRequestMessage {
+    int32 userId = 1;
+    string email = 2;
+    bool myCampaignsOnly = 3;
+}
+
+message RetrieveCampaignsResponseMessage {
+    bool doneSuccessfully = 1;
+    repeated int32 campaignId = 2;
+    repeated string name = 3;
+    repeated string notes = 4;
+    repeated string creatorEmail = 5;
+    repeated string configJson = 6;
+    repeated int32 participantCount = 7;
+}
+
+message SubmitDataRequestMessage {
+    int32 userId = 1;
+    string email = 2;
+    int64 timestamp = 3;
+    int32 dataSource = 4;
+    string values = 5;
+}
+
+message SubmitHeartbeatRequestMessage {
+    int32 userId = 1;
+    string email = 2;
+}
+
+message SubmitDirectMessageRequestMessage {
+    int32 userId = 1;
+    string email = 2;
+    string targetEmail = 3;
+    string subject = 4;
+    string content = 5;
+}
+
+message RetrieveParticipantsRequestMessage {
+    int32 userId = 1;
+    string email = 2;
+    int32 campaignId = 3;
+}
+
+message RetrieveParticipantsResponseMessage {
+    bool doneSuccessfully = 1;
+    repeated string email = 2;
+    repeated string name = 3;
+}
+
+message RetrieveParticipantStatisticsRequestMessage {
+    int32 userId = 1;
+    string email = 2;
+    string targetEmail = 3;
+}
+
+message RetrieveParticipantStatisticsResponseMessage {
+    bool doneSuccessfully = 1;
+    int64 lastSyncedTimestamp = 3;
+    int64 lastHeartbeatTimestamp = 4;
+    int32 amountOfSubmittedDataSamples = 5;
+}
+
+message RetrieveDataRequestMessage {
+    int32 userId = 1;
+    string email = 2;
+    string targetEmail = 3;
+    int64 fromTimestamp = 4;
+    int64 tillTimestamp = 5;
+}
+
+message RetrieveDataResponseMessage {
+    bool doneSuccessfully = 1;
+    repeated int64 timestamp = 2;
+    repeated int32 dataSource = 3;
+    repeated string value = 4;
+}
+
+message RetrieveUnreadDirectMessagesRequestMessage {
+    int32 userId = 1;
+    string email = 2;
+}
+
+message RetrieveUnreadDirectMessagesResponseMessage {
+    bool doneSuccessfully = 1;
+    repeated string sourceEmail = 2;
+    repeated int64 timestamp = 3;
+    repeated string subject = 4;
+    repeated string content = 5;
+}
+
+message RetrieveUnreadNotificationsRequestMessage {
+    int32 userId = 1;
+    string email = 2;
+}
+
+message RetrieveUnreadNotificationsResponseMessage {
+    bool doneSuccessfully = 1;
+    repeated int64 timestamp = 2;
+    repeated string subject = 3;
+    repeated string content = 4;
+}
+
+message BindDataSourceRequestMessage {
+    int32 userId = 1;
+    string email = 2;
+    string name = 3;
+}
+
+message BindDataSourceResponseMessage {
+    bool doneSuccessfully = 1;
+    int32 dataSourceId = 2;
+}
+
+message RetrieveAllDataSourcesRequestMessage {
+    int32 userId = 1;
+    string email = 2;
+}
+
+message RetrieveAllDataSourcesResponseMessage {
+    bool doneSuccessfully = 1;
+    repeated int32 dataSourceId = 2;
+    repeated string name = 3;
+    repeated string description = 4;
+}
+
+service ETService {
+    rpc loginWithGoogleId (LoginWithGoogleIdTokenRequestMessage) returns (LoginResponseMessage) {
+    }
+    rpc dashboardLoginWithEmail (DashboardLoginWithEmailRequestMessage) returns (LoginResponseMessage) {
+    }
+    rpc registerCampaign (RegisterCampaignRequestMessage) returns (RegisterCampaignResponseMessage) {
+    }
+    rpc retrieveCampaigns (RetrieveCampaignsRequestMessage) returns (RetrieveCampaignsResponseMessage) {
+    }
+    rpc submitData (SubmitDataRequestMessage) returns (DefaultResponseMessage) {
+    }
+    rpc submitHeartbeat (SubmitHeartbeatRequestMessage) returns (DefaultResponseMessage) {
+    }
+    rpc submitDirectMessage (SubmitDirectMessageRequestMessage) returns (DefaultResponseMessage) {
+    }
+    rpc retrieveParticipants (RetrieveParticipantsRequestMessage) returns (RetrieveParticipantsResponseMessage) {
+    }
+    rpc retrieveParticipantStatistics (RetrieveParticipantStatisticsRequestMessage) returns (RetrieveParticipantStatisticsResponseMessage) {
+    }
+    rpc retrieveData (RetrieveDataRequestMessage) returns (RetrieveDataResponseMessage) {
+    }
+    rpc retrieveUnreadDirectMessages (RetrieveUnreadDirectMessagesRequestMessage) returns (RetrieveUnreadDirectMessagesResponseMessage) {
+    }
+    rpc retrieveUnreadNotifications (RetrieveUnreadNotificationsRequestMessage) returns (RetrieveUnreadNotificationsResponseMessage) {
+    }
+    rpc bindDataSource (BindDataSourceRequestMessage) returns (BindDataSourceResponseMessage) {
+    }
+    rpc retrieveAllDataSources (RetrieveAllDataSourcesRequestMessage) returns (RetrieveAllDataSourcesResponseMessage) {
+    }
+}
+
+/*
+gRPC HOWTO:
+Compile into python script:
+    python -m grpc_tools.protoc -I=[input directory] --python_out=[output directory] --grpc_python_out=[output directory] [file name].proto
+    python -m grpc_tools.protoc -I=./et_protos/ --python_out=./et_grpcs/ --grpc_python_out=./et_grpcs/ et_service.proto
+Compile into java source:
+    protoc --java_out=[output directory] --grpc_java_out=[output directory] [file name].proto
+etc.
+*/

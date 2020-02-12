@@ -8,7 +8,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ServiceConnection;
-import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.util.Log;
@@ -18,39 +17,23 @@ import android.widget.TextView;
 
 import java.util.Locale;
 
-import static kr.ac.inha.nsl.AuthenticationActivity.KEY_USERNAME;
-import static kr.ac.inha.nsl.AuthenticationActivity.KEY_PASSWORD;
-
 public class MainActivity extends Activity {
-
-    // region Variable
     private int logLinesCount;
 
-    // UI elements
     private TextView logEditText;
     private Button startDataCollectionButton;
     private Button stopDataCollectionButton;
     private Button uploadSensorDataButton;
 
-    // Threads
     private Thread submitDataThread;
     private StoppableRunnable submitDataRunnable;
     private Thread sampleCounterThread;
     private StoppableRunnable sampleCounterRunnable;
 
-    // Tizen-service related variables
-    private TizenAgentService tizenAgentService;
-    private TizenBroadcastReceiver tizenBroadcastReceiver;
-    private ServiceConnection tizenServiceConnection;
-    private boolean tizenServiceBound = false;
-
-    // Data-collector service related variables
     private DataCollectorBroadcastReceiver dataCollectorBroadcastReceiver;
     private ServiceConnection dataCollectorServiceConnection;
     private boolean dataCollectorServiceBound = false;
-    // endregion
 
-    // region Override
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -87,14 +70,9 @@ public class MainActivity extends Activity {
         startSamplesCounterThread();
         super.onResume();
     }
-    // endregion
 
 
     public void logoutButtonClick(View view) {
-        SharedPreferences.Editor editor = Tools.prefs.edit();
-        editor.remove(KEY_USERNAME);
-        editor.remove(KEY_PASSWORD);
-        editor.apply();
         finish();
     }
 
@@ -122,15 +100,12 @@ public class MainActivity extends Activity {
 
 
     private void log(final String message) {
-        runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                if (logLinesCount == logEditText.getMaxLines())
-                    logEditText.setText(String.format(Locale.US, "%s%n%s", logEditText.getText().toString().substring(logEditText.getText().toString().indexOf('\n') + 1), message));
-                else {
-                    logEditText.setText(String.format("%s%n%s", logEditText.getText(), message));
-                    logLinesCount++;
-                }
+        runOnUiThread(() -> {
+            if (logLinesCount == 100)
+                logEditText.setText(String.format(Locale.US, "%s%n%s", logEditText.getText().toString().substring(logEditText.getText().toString().indexOf('\n') + 1), message));
+            else {
+                logEditText.setText(String.format("%s%n%s", logEditText.getText(), message));
+                logLinesCount++;
             }
         });
     }
@@ -156,12 +131,7 @@ public class MainActivity extends Activity {
             @Override
             public void run() {
                 while (!terminate) {
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            uploadSensorDataButton.setText(getString(R.string.upload_sensor_data, Tools.countSamples()));
-                        }
-                    });
+                    runOnUiThread(() -> uploadSensorDataButton.setText(getString(R.string.upload_sensor_data, Tools.countSamples())));
                     try {
                         Thread.sleep(1000);
                     } catch (InterruptedException e) {
@@ -182,60 +152,6 @@ public class MainActivity extends Activity {
                 e.printStackTrace();
             }
         }
-    }
-
-
-    private void startTizenService() {
-        // Start service
-        Intent intent = new Intent(this, TizenAgentService.class);
-        startService(intent);
-
-        // Bind service
-        tizenServiceConnection = new ServiceConnection() {
-            @Override
-            public void onServiceConnected(ComponentName name, IBinder service) {
-                tizenAgentService = ((TizenAgentService.LocalBinder) service).getService();
-                tizenServiceBound = true;
-                Log.e("MainActivity", "onServiceConnected: tizenServiceConnection");
-            }
-
-            @Override
-            public void onServiceDisconnected(ComponentName name) {
-                tizenAgentService = null;
-                tizenServiceBound = false;
-                Log.e("MainActivity", "onServiceDisconnected: tizenServiceConnection");
-            }
-        };
-        tizenServiceBound = bindService(intent, tizenServiceConnection, Context.BIND_AUTO_CREATE);
-
-        // Set up receiver
-        tizenBroadcastReceiver = new TizenBroadcastReceiver();
-        IntentFilter filter = new IntentFilter();
-        filter.addAction(TizenBroadcastReceiver.PACKAGE);
-        registerReceiver(tizenBroadcastReceiver, filter);
-
-        // Find peers & connect
-        if (tizenServiceBound && tizenAgentService != null)
-            tizenAgentService.findPeers();
-    }
-
-    private void stopTizenService() {
-        // Unregister receiver
-        unregisterReceiver(tizenBroadcastReceiver);
-
-        // Disconnect from service
-        if (tizenServiceBound && tizenAgentService != null && !tizenAgentService.closeConnection())
-            Log.e("MainActivity", "stopTizenService: closeConnection");
-
-        // Unbind the service
-        if (tizenServiceBound) {
-            unbindService(tizenServiceConnection);
-            tizenServiceBound = false;
-        }
-
-        // Stop the service
-        Intent intent = new Intent(this, DataCollectorService.class);
-        stopService(intent);
     }
 
     private void startDataCollectionService() {
@@ -283,7 +199,7 @@ public class MainActivity extends Activity {
 
 
     class TizenBroadcastReceiver extends BroadcastReceiver {
-        static final String PACKAGE = "kr.ac.nsl.inha.MainActivity$TizenBroadcastReceiver";
+        // static final String PACKAGE = "kr.ac.nsl.inha.MainActivity$TizenBroadcastReceiver";
 
         @Override
         public void onReceive(Context context, Intent intent) {

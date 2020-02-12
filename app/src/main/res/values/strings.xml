@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- region gRPC server details -->
+    <string name="grpc_host">165.246.43.162</string>
+    <string name="grpc_port">50051</string>
+    <!-- endregion -->
+
+
     <string name="app_name">EasyTrack\nAndroid Agent App</string>
     <string name="device_as_data_source">smartphone-android</string>
     <string name="ConnectionEstablishedMsg">Connection established</string>

@@ -7,24 +7,20 @@ import android.util.Log;
 import com.google.android.gms.location.ActivityRecognitionResult;
 import com.google.android.gms.location.DetectedActivity;
 
+import java.io.IOException;
 import java.util.Locale;
 
-@SuppressWarnings("unused")
 public class MyActivityRecognitionService extends IntentService {
+    @SuppressWarnings("unused")
     public MyActivityRecognitionService() {
         super("MyActivityRecognitionService");
     }
 
+    @SuppressWarnings("unused")
     public MyActivityRecognitionService(String name) {
         super(name);
     }
 
-    // region Constants
-    static final int ACTIVITY_RECOGNITION_DATA_SOURCE_ID = 0xf01;
-    static final int ACTIVITY_RECOGNITION_INTERVAL = 1000; // 1 minute = 60000
-    // endregion
-
-    // region Override
     @Override
     protected void onHandleIntent(Intent intent) {
         if (intent != null) {
@@ -67,10 +63,15 @@ public class MyActivityRecognitionService extends IntentService {
                         break;
                 }
 
-                Tools.saveStringData(ACTIVITY_RECOGNITION_DATA_SOURCE_ID, result.getTime(), confidence, activity);
-                Log.e("ACTIVITY UPDATE", String.format(Locale.getDefault(), "(Activity,Confidence)=(%s, %.3f)", activity, confidence));
+                try {
+                    Tools.storeActivityRecognitionData(result.getTime(), activity, confidence);
+                    Tools.checkAndSendActivityData();
+                    Tools.checkAndSendUsageAccessStats();
+                    Log.e("ACTIVITY UPDATE", String.format(Locale.getDefault(), "(Activity,Confidence)=(%s, %.3f)", activity, confidence));
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
             }
         }
     }
-    // endregion
 }
