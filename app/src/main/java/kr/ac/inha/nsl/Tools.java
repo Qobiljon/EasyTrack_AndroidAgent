@@ -51,7 +51,7 @@ class Tools {
 
 
     static void init(Context context) {
-        db = context.openOrCreateDatabase("EasyTrack_TizenAgent_LocalDB", Context.MODE_PRIVATE, null);
+        db = context.openOrCreateDatabase(context.getPackageName(), Context.MODE_PRIVATE, null);
         db.execSQL("CREATE TABLE IF NOT EXISTS SensorRecords(sensorId INT DEFAULT(0), timestamp BIGINT DEFAULT(0), accuracy FLOAT DEFAULT(0.0), data VARCHAR(164) DEFAULT(NULL));");
         prefs = context.getSharedPreferences(context.getString(R.string.app_name), Context.MODE_PRIVATE);
         PACKAGE_NAME = context.getPackageName();

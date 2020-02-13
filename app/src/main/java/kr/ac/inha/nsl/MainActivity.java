@@ -8,6 +8,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ServiceConnection;
+import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.util.Log;
@@ -18,6 +19,8 @@ import android.widget.TextView;
 import java.util.Locale;
 
 public class MainActivity extends Activity {
+    static String TAG = "EasyTrack";
+
     private int logLinesCount;
 
     private TextView logEditText;
@@ -34,11 +37,13 @@ public class MainActivity extends Activity {
     private ServiceConnection dataCollectorServiceConnection;
     private boolean dataCollectorServiceBound = false;
 
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        Tools.init(this);
         Tools.cleanDb();
 
         startDataCollectionButton = findViewById(R.id.startDataCollectionButton);
@@ -48,9 +53,15 @@ public class MainActivity extends Activity {
 
         logLinesCount = 0;
         uploadSensorDataButton.setText(getString(R.string.upload_sensor_data, 0));
+    }
 
+    @Override
+    protected void onStart() {
+        super.onStart();
+
+        SharedPreferences preferences = getSharedPreferences(getPackageName(), Context.MODE_PRIVATE);
         TextView usernameTextView = findViewById(R.id.usernameTextView);
-        usernameTextView.setText(String.format("User: %s", Tools.prefs.getString("username", null)));
+        usernameTextView.setText(String.format("User: %s", preferences.getString("email", null)));
     }
 
     @Override
@@ -72,7 +83,22 @@ public class MainActivity extends Activity {
     }
 
 
+    private void log(final String message) {
+        runOnUiThread(() -> {
+            if (logLinesCount == 100)
+                logEditText.setText(String.format(Locale.US, "%s%n%s", logEditText.getText().toString().substring(logEditText.getText().toString().indexOf('\n') + 1), message));
+            else {
+                logEditText.setText(String.format("%s%n%s", logEditText.getText(), message));
+                logLinesCount++;
+            }
+        });
+    }
+
     public void logoutButtonClick(View view) {
+        SharedPreferences prefs = getSharedPreferences(getPackageName(), Context.MODE_PRIVATE);
+        SharedPreferences.Editor editor = prefs.edit();
+        editor.clear();
+        editor.apply();
         finish();
     }
 
@@ -97,19 +123,6 @@ public class MainActivity extends Activity {
             uploadSensorDataButton.setText(getString(R.string.cancel_upload_sensor_data));
         }
     }
-
-
-    private void log(final String message) {
-        runOnUiThread(() -> {
-            if (logLinesCount == 100)
-                logEditText.setText(String.format(Locale.US, "%s%n%s", logEditText.getText().toString().substring(logEditText.getText().toString().indexOf('\n') + 1), message));
-            else {
-                logEditText.setText(String.format("%s%n%s", logEditText.getText(), message));
-                logLinesCount++;
-            }
-        });
-    }
-
 
     public void startDataCollectionClick(View view) {
         startDataCollectionService();
@@ -197,15 +210,6 @@ public class MainActivity extends Activity {
         stopService(intent);
     }
 
-
-    class TizenBroadcastReceiver extends BroadcastReceiver {
-        // static final String PACKAGE = "kr.ac.nsl.inha.MainActivity$TizenBroadcastReceiver";
-
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            Log.e("TizenReceiver", "onReceive: TizenBroadcastReceiver");
-        }
-    }
 
     class DataCollectorBroadcastReceiver extends BroadcastReceiver {
         static final String PACKAGE = "kr.ac.nsl.inha.MainActivity$DataCollectorBroadcastReceiver";

@@ -1,9 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- region gRPC server details -->
     <string name="grpc_host">165.246.43.162</string>
     <string name="grpc_port">50051</string>
-    <!-- endregion -->
+    <string name="easytrack_campaign_id">1</string>
 
 
     <string name="app_name">EasyTrack\nAndroid Agent App</string>

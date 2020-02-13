@@ -35,48 +35,14 @@
 
     </LinearLayout>
 
-    <LinearLayout
-        android:layout_width="match_parent"
+    <Button
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_centerInParent="true"
-        android:layout_margin="10dp"
-        android:background="@drawable/login_entry_box_bg"
-        android:orientation="vertical"
-        android:padding="10dp">
-
-        <EditText
-            android:id="@+id/usernameEditText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center_horizontal"
-            android:hint="@string/username"
-            android:importantForAutofill="no"
-            android:inputType="textShortMessage"
-            tools:ignore="UnusedAttribute" />
-
-        <EditText
-            android:id="@+id/passwordEditText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center_horizontal"
-            android:hint="@string/password"
-            android:importantForAutofill="no"
-            android:inputType="textPassword"
-            tools:ignore="UnusedAttribute" />
-
-        <Button
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:onClick="loginButtonClick"
-            android:text="@string/login" />
-
-        <Button
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:onClick="registerButtonClick"
-            android:text="@string/register" />
-
-    </LinearLayout>
+        android:onClick="loginButtonClick"
+        android:paddingStart="40dp"
+        android:paddingEnd="40dp"
+        android:text="@string/login" />
 
     <FrameLayout
         android:id="@+id/clickBlockPanel"

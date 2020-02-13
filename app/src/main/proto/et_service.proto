@@ -9,6 +9,18 @@ message LoginWithGoogleIdTokenRequestMessage {
     string idToken = 1;
 }
 
+message BindUserToCampaignRequestMessage {
+    int32 userId = 1;
+    string email = 2;
+    int32 campaignId = 3;
+}
+
+message BindUserToCampaignResponseMessage {
+    bool doneSuccessfully = 1;
+    bool isFirstTimeBinding = 2;
+    int64 campaignStartTimestamp = 3;
+}
+
 message DashboardLoginWithEmailRequestMessage {
     string email = 1;
     string name = 2;
@@ -26,6 +38,8 @@ message RegisterCampaignRequestMessage {
     string name = 3;
     string notes = 4;
     string configJson = 5;
+    int64 startTimestamp = 6;
+    int64 endTimestamp = 7;
 }
 
 message RegisterCampaignResponseMessage {
@@ -44,12 +58,14 @@ message RetrieveCampaignsResponseMessage {
     repeated int32 campaignId = 2;
     repeated string name = 3;
     repeated string notes = 4;
-    repeated string creatorEmail = 5;
-    repeated string configJson = 6;
-    repeated int32 participantCount = 7;
+    repeated int64 startTimestamp = 5;
+    repeated int64 endTimestamp = 6;
+    repeated string creatorEmail = 7;
+    repeated string configJson = 8;
+    repeated int32 participantCount = 9;
 }
 
-message SubmitDataRequestMessage {
+message SubmitDataRecordRequestMessage {
     int32 userId = 1;
     string email = 2;
     int64 timestamp = 3;
@@ -86,13 +102,19 @@ message RetrieveParticipantStatisticsRequestMessage {
     int32 userId = 1;
     string email = 2;
     string targetEmail = 3;
+    int32 targetCampaignId = 4;
 }
 
 message RetrieveParticipantStatisticsResponseMessage {
     bool doneSuccessfully = 1;
-    int64 lastSyncedTimestamp = 3;
-    int64 lastHeartbeatTimestamp = 4;
-    int32 amountOfSubmittedDataSamples = 5;
+    int32 activeCampaignId = 2;
+    int64 campaignJoinTimestamp = 3;
+    int64 lastSyncTimestamp = 4;
+    int64 lastHeartbeatTimestamp = 5;
+    int32 amountOfSubmittedDataSamples = 6;
+    int32 dataSourceId = 7;
+    int32 amountOfSamplesPerDataSource = 8;
+    int64 studyJoinTimestamp = 9;
 }
 
 message RetrieveDataRequestMessage {
@@ -161,13 +183,15 @@ message RetrieveAllDataSourcesResponseMessage {
 service ETService {
     rpc loginWithGoogleId (LoginWithGoogleIdTokenRequestMessage) returns (LoginResponseMessage) {
     }
+    rpc bindUserToCampaign (BindUserToCampaignRequestMessage) returns (BindUserToCampaignResponseMessage) {
+    }
     rpc dashboardLoginWithEmail (DashboardLoginWithEmailRequestMessage) returns (LoginResponseMessage) {
     }
     rpc registerCampaign (RegisterCampaignRequestMessage) returns (RegisterCampaignResponseMessage) {
     }
     rpc retrieveCampaigns (RetrieveCampaignsRequestMessage) returns (RetrieveCampaignsResponseMessage) {
     }
-    rpc submitData (SubmitDataRequestMessage) returns (DefaultResponseMessage) {
+    rpc submitDataRecord (SubmitDataRecordRequestMessage) returns (DefaultResponseMessage) {
     }
     rpc submitHeartbeat (SubmitHeartbeatRequestMessage) returns (DefaultResponseMessage) {
     }
@@ -187,6 +211,7 @@ service ETService {
     }
     rpc retrieveAllDataSources (RetrieveAllDataSourcesRequestMessage) returns (RetrieveAllDataSourcesResponseMessage) {
     }
+    // TODO: add an rpc for retrieving data from a specific data-source (i.e., EMA)
 }
 
 /*
