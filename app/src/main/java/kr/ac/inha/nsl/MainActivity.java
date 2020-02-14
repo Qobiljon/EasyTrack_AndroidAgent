@@ -2,11 +2,9 @@ package kr.ac.inha.nsl;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
-import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.ServiceConnection;
 import android.content.SharedPreferences;
 import android.os.Bundle;
@@ -15,11 +13,12 @@ import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
-import android.widget.Toast;
+
+import org.json.JSONException;
+import org.json.JSONObject;
 
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
-import java.util.List;
 import java.util.Locale;
 
 import inha.nslab.easytrack.ETServiceGrpc;
@@ -43,7 +42,6 @@ public class MainActivity extends Activity {
     private Thread sampleCounterThread;
     private StoppableRunnable sampleCounterRunnable;
 
-    private DataCollectorBroadcastReceiver dataCollectorBroadcastReceiver;
     private ServiceConnection dataCollectorServiceConnection;
     private boolean dataCollectorServiceBound = false;
 
@@ -64,21 +62,17 @@ public class MainActivity extends Activity {
 
         logLinesCount = 0;
         uploadSensorDataButton.setText(getString(R.string.upload_sensor_data, 0));
-    }
 
-    @Override
-    protected void onStart() {
-        super.onStart();
-
-        SharedPreferences preferences = getSharedPreferences(getPackageName(), Context.MODE_PRIVATE);
+        SharedPreferences prefs = getSharedPreferences(getPackageName(), Context.MODE_PRIVATE);
         TextView usernameTextView = findViewById(R.id.usernameTextView);
-        usernameTextView.setText(String.format("User: %s", preferences.getString("email", null)));
+        usernameTextView.setText(String.format("User: %s", prefs.getString("email", null)));
     }
 
     @Override
     protected void onDestroy() {
-        // stopTizenService();
         stopSamplesCounterThread();
+        if (dataCollectorServiceBound)
+            unbindService(dataCollectorServiceConnection);
         super.onDestroy();
     }
 
@@ -103,79 +97,81 @@ public class MainActivity extends Activity {
 
             try {
                 ETServiceGrpc.ETServiceBlockingStub stub = ETServiceGrpc.newBlockingStub(channel);
-                loadDataSourcesGrpc(stub, prefs);
-                loadCampaignGrpc(stub, prefs);
+                EtService.RetrieveCampaignRequestMessage retrieveCampaignRequestMessage = EtService.RetrieveCampaignRequestMessage.newBuilder()
+                        .setUserId(prefs.getInt("userId", -1))
+                        .setEmail(prefs.getString("email", null))
+                        .setCampaignId(Integer.parseInt(getString(R.string.easytrack_campaign_id)))
+                        .build();
+
+                EtService.RetrieveCampaignResponseMessage retrieveCampaignResponseMessage = stub.retrieveCampaign(retrieveCampaignRequestMessage);
+                if (retrieveCampaignResponseMessage.getDoneSuccessfully()) {
+                    setUpCampaignConfigurations(
+                            retrieveCampaignResponseMessage.getName(),
+                            retrieveCampaignResponseMessage.getNotes(),
+                            retrieveCampaignResponseMessage.getCreatorEmail(),
+                            retrieveCampaignResponseMessage.getConfigJson(),
+                            retrieveCampaignResponseMessage.getStartTimestamp(),
+                            retrieveCampaignResponseMessage.getEndTimestamp(),
+                            retrieveCampaignResponseMessage.getParticipantCount(),
+                            prefs
+                    );
+                    stopDataCollectionService();
+                    startDataCollectionService();
+                    log("Study configuration has been reloaded and services have restarted");
+                } else
+                    log("Failed to retrieve campaign details");
             } catch (StatusRuntimeException e) {
                 log("An error occurred in the gRPC connection establishment");
-                Log.e(TAG, "onCreate: gRPC server unavailable");
+            } catch (JSONException e) {
+                log("An error occurred parsing the campaign configuration (JSON)");
             } finally {
                 channel.shutdown();
             }
         }).start();
     }
 
-    private void loadDataSourcesGrpc(ETServiceGrpc.ETServiceBlockingStub stub, SharedPreferences prefs) throws StatusRuntimeException {
-        // region Load data sources
-        EtService.RetrieveAllDataSourcesRequestMessage retrieveAllDataSourcesRequestMessage = EtService.RetrieveAllDataSourcesRequestMessage.newBuilder()
-                .setUserId(prefs.getInt("userId", -1))
-                .setEmail(prefs.getString("email", null))
-                .build();
-        EtService.RetrieveAllDataSourcesResponseMessage retrieveAllDataSourcesResponseMessage = stub.retrieveAllDataSources(retrieveAllDataSourcesRequestMessage);
-        if (retrieveAllDataSourcesResponseMessage.getDoneSuccessfully()) {
-            SharedPreferences.Editor editor = prefs.edit();
+    private void setUpCampaignConfigurations(String name, String notes, String creatorEmail, String configJson, long startTimestamp, long endTimestamp, int participantCount, SharedPreferences prefs) throws JSONException {
+        Calendar fromCal = Calendar.getInstance(), tillCal = Calendar.getInstance();
+        fromCal.setTimeInMillis(startTimestamp);
+        tillCal.setTimeInMillis(endTimestamp);
+        log("Campaign configurations loaded");
+        log("Name: " + name + "(by " + creatorEmail + ")");
+        log("From: " + SimpleDateFormat.getDateTimeInstance().format(fromCal.getTime()) + " till: " + SimpleDateFormat.getDateTimeInstance().format(tillCal.getTime()));
+        log(participantCount + " participants enrolled to this campaign");
 
-            StringBuilder sb = new StringBuilder();
-            for (int n = 0; n < retrieveAllDataSourcesResponseMessage.getNameCount(); n++) {
-                String dataSourceName = retrieveAllDataSourcesResponseMessage.getName(n);
-                sb.append(String.format(Locale.getDefault(), "%s,", dataSourceName));
-                editor.putInt(dataSourceName, retrieveAllDataSourcesResponseMessage.getDataSourceId(n));
+        String oldConfigJson = prefs.getString(String.format(Locale.getDefault(), "%s_configJson", name), null);
+        if (configJson.equals(oldConfigJson))
+            return;
+
+        SharedPreferences.Editor editor = prefs.edit();
+        editor.putString(String.format(Locale.getDefault(), "%s_configJson", name), configJson);
+
+        StringBuilder sb = new StringBuilder();
+        JSONObject root = new JSONObject(configJson);
+        int index = 0;
+        while (root.has(String.valueOf(index))) {
+            JSONObject elem = root.getJSONObject(String.valueOf(index));
+            String _name = elem.getString("name");
+            sb.append(_name).append(',');
+            int _dataSourceId = elem.getInt("data_source_id");
+            editor.putInt(_name, _dataSourceId);
+            if (elem.has("rate")) {
+                int _rate = elem.getInt("rate");
+                editor.putInt(String.format(Locale.getDefault(), "%s_rate", _name), _rate);
+            } else if (elem.has("json")) {
+                String _json = elem.getString("json");
+                editor.putString(String.format(Locale.getDefault(), "%s_rate", _name), _json);
+            } else {
+                Log.e(TAG, "setUpCampaignConfigurations: weird data source json case " + elem.toString());
+                throw new JSONException("rate/json must be in the data source json: " + elem.toString());
             }
-            if (sb.length() > 0)
-                sb.replace(sb.length() - 1, sb.length(), "");
-            editor.putString("dataSourceNames", sb.toString());
-
-            editor.apply();
-        } else
-            log("Failed to retrieve data sources");
+            index++;
+        }
+        if (sb.length() > 0)
+            sb.replace(sb.length() - 1, sb.length(), "");
+        editor.putString("dataSourceNames", sb.toString());
+        editor.apply();
     }
-
-    private void loadCampaignGrpc(ETServiceGrpc.ETServiceBlockingStub stub, SharedPreferences prefs) throws StatusRuntimeException {
-        EtService.RetrieveCampaignRequestMessage retrieveCampaignRequestMessage = EtService.RetrieveCampaignRequestMessage.newBuilder()
-                .setUserId(prefs.getInt("userId", -1))
-                .setEmail(prefs.getString("email", null))
-                .setCampaignId(Integer.parseInt(getString(R.string.easytrack_campaign_id)))
-                .build();
-
-        EtService.RetrieveCampaignResponseMessage retrieveCampaignResponseMessage = stub.retrieveCampaign(retrieveCampaignRequestMessage);
-        if (retrieveCampaignResponseMessage.getDoneSuccessfully()) {
-            setUpCampaignConfigurations(
-                    retrieveCampaignResponseMessage.getName(),
-                    retrieveCampaignResponseMessage.getNotes(),
-                    retrieveCampaignResponseMessage.getCreatorEmail(),
-                    retrieveCampaignResponseMessage.getConfigJson(),
-                    retrieveCampaignResponseMessage.getStartTimestamp(),
-                    retrieveCampaignResponseMessage.getEndTimestamp(),
-                    retrieveCampaignResponseMessage.getParticipantCount()
-            );
-        } else
-            log("Failed to retrieve campaign details");
-    }
-
-    private void setUpCampaignConfigurations(String name, String notes, String creatorEmail, String configJson, long startTimestamp, long endTimestamp, int participantCount) {
-        log("Name: " + name);
-        log("Notes: " + notes);
-        log("Creator email: " + creatorEmail);
-        log("ConfigJson: " + configJson);
-
-        Calendar cal = Calendar.getInstance();
-        cal.setTimeInMillis(startTimestamp);
-        log("Start time: " + SimpleDateFormat.getDateTimeInstance().format(cal.getTime()));
-        cal.setTimeInMillis(endTimestamp);
-        log("End time: " + SimpleDateFormat.getDateTimeInstance().format(cal.getTime()));
-
-        log("Number of participants: " + participantCount);
-    }
-
 
     private void log(final String message) {
         runOnUiThread(() -> {
@@ -186,49 +182,6 @@ public class MainActivity extends Activity {
                 logLinesCount++;
             }
         });
-    }
-
-    public void logoutButtonClick(View view) {
-        SharedPreferences prefs = getSharedPreferences(getPackageName(), Context.MODE_PRIVATE);
-        SharedPreferences.Editor editor = prefs.edit();
-        editor.clear();
-        editor.apply();
-        finish();
-    }
-
-    public void uploadSensorDataClick(View view) {
-        if (submitDataRunnable != null && !submitDataRunnable.terminate) {
-            submitDataRunnable.terminate = true;
-            try {
-                submitDataThread.join();
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-            uploadSensorDataButton.setText(getString(R.string.upload_sensor_data));
-        } else {
-            submitDataThread = new Thread(submitDataRunnable = new StoppableRunnable() {
-                @SuppressLint("SetTextI18n")
-                @Override
-                public void run() {
-                    Tools.submitCollectedData();
-                }
-            });
-            submitDataThread.start();
-            uploadSensorDataButton.setText(getString(R.string.cancel_upload_sensor_data));
-        }
-    }
-
-    public void startDataCollectionClick(View view) {
-        startDataCollectionService();
-        startDataCollectionButton.setClickable(false);
-        stopDataCollectionButton.setClickable(true);
-    }
-
-    public void stopDataCollectionClick(View view) {
-        stopDataCollectionService();
-        startDataCollectionButton.setClickable(true);
-        stopDataCollectionButton.setClickable(false);
-        log("Data collection campaign has terminated");
     }
 
     public void startSamplesCounterThread() {
@@ -271,28 +224,19 @@ public class MainActivity extends Activity {
             @Override
             public void onServiceConnected(ComponentName name, IBinder service) {
                 dataCollectorServiceBound = true;
-                Log.e("MainActivity", "onServiceConnected: dataCollectorServiceConnection");
+                Log.e(TAG, "DataCollectorService has been bound to MainActivity");
             }
 
             @Override
             public void onServiceDisconnected(ComponentName name) {
                 dataCollectorServiceBound = false;
-                Log.e("MainActivity", "onServiceDisconnected: dataCollectorServiceConnection");
+                Log.e(TAG, "DataCollectorService has been unbound from MainActivity");
             }
         };
         dataCollectorServiceBound = bindService(intent, dataCollectorServiceConnection, Context.BIND_AUTO_CREATE);
-
-        // Set up receiver
-        dataCollectorBroadcastReceiver = new DataCollectorBroadcastReceiver();
-        IntentFilter filter = new IntentFilter();
-        filter.addAction(DataCollectorBroadcastReceiver.PACKAGE);
-        registerReceiver(dataCollectorBroadcastReceiver, filter);
     }
 
     private void stopDataCollectionService() {
-        // Unregister receiver
-        unregisterReceiver(dataCollectorBroadcastReceiver);
-
         // Unbind the service
         if (dataCollectorServiceBound) {
             unbindService(dataCollectorServiceConnection);
@@ -305,15 +249,46 @@ public class MainActivity extends Activity {
     }
 
 
-    class DataCollectorBroadcastReceiver extends BroadcastReceiver {
-        static final String PACKAGE = "kr.ac.nsl.inha.MainActivity$DataCollectorBroadcastReceiver";
+    public void logoutButtonClick(View view) {
+        SharedPreferences prefs = getSharedPreferences(getPackageName(), Context.MODE_PRIVATE);
+        SharedPreferences.Editor editor = prefs.edit();
+        editor.clear();
+        editor.apply();
+        finish();
+    }
 
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            if (intent.hasExtra("log_message"))
-                log(intent.getStringExtra("log_message"));
-            else
-                Log.e("TizenReceiver", "onReceive: DataCollectorBroadcastReceiver");
+    public void uploadSensorDataClick(View view) {
+        if (submitDataRunnable != null && !submitDataRunnable.terminate) {
+            submitDataRunnable.terminate = true;
+            try {
+                submitDataThread.join();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            uploadSensorDataButton.setText(getString(R.string.upload_sensor_data));
+        } else {
+            submitDataThread = new Thread(submitDataRunnable = new StoppableRunnable() {
+                @SuppressLint("SetTextI18n")
+                @Override
+                public void run() {
+                    Tools.submitCollectedData();
+                }
+            });
+            submitDataThread.start();
+            uploadSensorDataButton.setText(getString(R.string.cancel_upload_sensor_data));
         }
+    }
+
+    public void startDataCollectionClick(View view) {
+        startDataCollectionService();
+        startDataCollectionButton.setClickable(false);
+        stopDataCollectionButton.setClickable(true);
+    }
+
+    public void stopDataCollectionClick(View view) {
+        stopDataCollectionService();
+        startDataCollectionButton.setClickable(true);
+        stopDataCollectionButton.setClickable(false);
+        log("Data collection campaign has terminated");
     }
 }
