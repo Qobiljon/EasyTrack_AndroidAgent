@@ -65,6 +65,23 @@ message RetrieveCampaignsResponseMessage {
     repeated int32 participantCount = 9;
 }
 
+message RetrieveCampaignRequestMessage {
+    int32 userId = 1;
+    string email = 2;
+    int32 campaignId = 3;
+}
+
+message RetrieveCampaignResponseMessage {
+    bool doneSuccessfully = 1;
+    string name = 3;
+    string notes = 4;
+    int64 startTimestamp = 5;
+    int64 endTimestamp = 6;
+    string creatorEmail = 7;
+    string configJson = 8;
+    int32 participantCount = 9;
+}
+
 message SubmitDataRecordRequestMessage {
     int32 userId = 1;
     string email = 2;
@@ -177,7 +194,7 @@ message RetrieveAllDataSourcesResponseMessage {
     bool doneSuccessfully = 1;
     repeated int32 dataSourceId = 2;
     repeated string name = 3;
-    repeated string description = 4;
+    repeated string creatorEmail = 4;
 }
 
 service ETService {
@@ -190,6 +207,8 @@ service ETService {
     rpc registerCampaign (RegisterCampaignRequestMessage) returns (RegisterCampaignResponseMessage) {
     }
     rpc retrieveCampaigns (RetrieveCampaignsRequestMessage) returns (RetrieveCampaignsResponseMessage) {
+    }
+    rpc retrieveCampaign (RetrieveCampaignRequestMessage) returns (RetrieveCampaignResponseMessage) {
     }
     rpc submitDataRecord (SubmitDataRecordRequestMessage) returns (DefaultResponseMessage) {
     }

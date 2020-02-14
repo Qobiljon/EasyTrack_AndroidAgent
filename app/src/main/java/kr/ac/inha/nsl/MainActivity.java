@@ -15,8 +15,18 @@ import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
+import android.widget.Toast;
 
+import java.text.SimpleDateFormat;
+import java.util.Calendar;
+import java.util.List;
 import java.util.Locale;
+
+import inha.nslab.easytrack.ETServiceGrpc;
+import inha.nslab.easytrack.EtService;
+import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
+import io.grpc.StatusRuntimeException;
 
 public class MainActivity extends Activity {
     static String TAG = "EasyTrack";
@@ -45,6 +55,7 @@ public class MainActivity extends Activity {
 
         Tools.init(this);
         Tools.cleanDb();
+        loadCampaign(getSharedPreferences(getPackageName(), Context.MODE_PRIVATE));
 
         startDataCollectionButton = findViewById(R.id.startDataCollectionButton);
         stopDataCollectionButton = findViewById(R.id.stopDataCollectionButton);
@@ -80,6 +91,89 @@ public class MainActivity extends Activity {
     protected void onResume() {
         startSamplesCounterThread();
         super.onResume();
+    }
+
+
+    private void loadCampaign(SharedPreferences prefs) {
+        new Thread(() -> {
+            ManagedChannel channel = ManagedChannelBuilder.forAddress(
+                    getString(R.string.grpc_host),
+                    Integer.parseInt(getString(R.string.grpc_port))
+            ).usePlaintext().build();
+
+            try {
+                ETServiceGrpc.ETServiceBlockingStub stub = ETServiceGrpc.newBlockingStub(channel);
+                loadDataSourcesGrpc(stub, prefs);
+                loadCampaignGrpc(stub, prefs);
+            } catch (StatusRuntimeException e) {
+                log("An error occurred in the gRPC connection establishment");
+                Log.e(TAG, "onCreate: gRPC server unavailable");
+            } finally {
+                channel.shutdown();
+            }
+        }).start();
+    }
+
+    private void loadDataSourcesGrpc(ETServiceGrpc.ETServiceBlockingStub stub, SharedPreferences prefs) throws StatusRuntimeException {
+        // region Load data sources
+        EtService.RetrieveAllDataSourcesRequestMessage retrieveAllDataSourcesRequestMessage = EtService.RetrieveAllDataSourcesRequestMessage.newBuilder()
+                .setUserId(prefs.getInt("userId", -1))
+                .setEmail(prefs.getString("email", null))
+                .build();
+        EtService.RetrieveAllDataSourcesResponseMessage retrieveAllDataSourcesResponseMessage = stub.retrieveAllDataSources(retrieveAllDataSourcesRequestMessage);
+        if (retrieveAllDataSourcesResponseMessage.getDoneSuccessfully()) {
+            SharedPreferences.Editor editor = prefs.edit();
+
+            StringBuilder sb = new StringBuilder();
+            for (int n = 0; n < retrieveAllDataSourcesResponseMessage.getNameCount(); n++) {
+                String dataSourceName = retrieveAllDataSourcesResponseMessage.getName(n);
+                sb.append(String.format(Locale.getDefault(), "%s,", dataSourceName));
+                editor.putInt(dataSourceName, retrieveAllDataSourcesResponseMessage.getDataSourceId(n));
+            }
+            if (sb.length() > 0)
+                sb.replace(sb.length() - 1, sb.length(), "");
+            editor.putString("dataSourceNames", sb.toString());
+
+            editor.apply();
+        } else
+            log("Failed to retrieve data sources");
+    }
+
+    private void loadCampaignGrpc(ETServiceGrpc.ETServiceBlockingStub stub, SharedPreferences prefs) throws StatusRuntimeException {
+        EtService.RetrieveCampaignRequestMessage retrieveCampaignRequestMessage = EtService.RetrieveCampaignRequestMessage.newBuilder()
+                .setUserId(prefs.getInt("userId", -1))
+                .setEmail(prefs.getString("email", null))
+                .setCampaignId(Integer.parseInt(getString(R.string.easytrack_campaign_id)))
+                .build();
+
+        EtService.RetrieveCampaignResponseMessage retrieveCampaignResponseMessage = stub.retrieveCampaign(retrieveCampaignRequestMessage);
+        if (retrieveCampaignResponseMessage.getDoneSuccessfully()) {
+            setUpCampaignConfigurations(
+                    retrieveCampaignResponseMessage.getName(),
+                    retrieveCampaignResponseMessage.getNotes(),
+                    retrieveCampaignResponseMessage.getCreatorEmail(),
+                    retrieveCampaignResponseMessage.getConfigJson(),
+                    retrieveCampaignResponseMessage.getStartTimestamp(),
+                    retrieveCampaignResponseMessage.getEndTimestamp(),
+                    retrieveCampaignResponseMessage.getParticipantCount()
+            );
+        } else
+            log("Failed to retrieve campaign details");
+    }
+
+    private void setUpCampaignConfigurations(String name, String notes, String creatorEmail, String configJson, long startTimestamp, long endTimestamp, int participantCount) {
+        log("Name: " + name);
+        log("Notes: " + notes);
+        log("Creator email: " + creatorEmail);
+        log("ConfigJson: " + configJson);
+
+        Calendar cal = Calendar.getInstance();
+        cal.setTimeInMillis(startTimestamp);
+        log("Start time: " + SimpleDateFormat.getDateTimeInstance().format(cal.getTime()));
+        cal.setTimeInMillis(endTimestamp);
+        log("End time: " + SimpleDateFormat.getDateTimeInstance().format(cal.getTime()));
+
+        log("Number of participants: " + participantCount);
     }
 
 

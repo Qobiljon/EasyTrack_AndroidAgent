@@ -14,11 +14,11 @@ import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Bundle;
 import android.provider.Settings;
-import android.text.format.DateFormat;
 import android.util.Log;
 import android.view.View;
 import android.widget.Toast;
 
+import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Locale;
 
@@ -108,14 +108,14 @@ public class AuthenticationActivity extends AppCompatActivity {
                                 });
                             else
                                 runOnUiThread(() -> {
-                                    Calendar campaignStartTime = Calendar.getInstance();
-                                    campaignStartTime.setTimeInMillis(responseMessage.getCampaignStartTimestamp());
+                                    Calendar cal = Calendar.getInstance();
+                                    cal.setTimeInMillis(responseMessage.getCampaignStartTimestamp());
                                     Toast.makeText(
                                             this,
                                             String.format(
                                                     Locale.getDefault(),
                                                     "EasyTrack campaign hasn't started. Campaign start time is: %s",
-                                                    DateFormat.format("dd-MM-yyyy hh:mm:ss", campaignStartTime).toString()
+                                                    SimpleDateFormat.getDateTimeInstance().format(cal.getTime())
                                             ),
                                             Toast.LENGTH_LONG
                                     ).show();
