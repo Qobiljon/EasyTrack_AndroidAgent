@@ -87,7 +87,8 @@ message SubmitDataRecordRequestMessage {
     string email = 2;
     int64 timestamp = 3;
     int32 dataSource = 4;
-    string values = 5;
+    float accuracy = 5;
+    string values = 6;
 }
 
 message SubmitHeartbeatRequestMessage {
@@ -129,9 +130,6 @@ message RetrieveParticipantStatisticsResponseMessage {
     int64 lastSyncTimestamp = 4;
     int64 lastHeartbeatTimestamp = 5;
     int32 amountOfSubmittedDataSamples = 6;
-    int32 dataSourceId = 7;
-    int32 amountOfSamplesPerDataSource = 8;
-    int64 studyJoinTimestamp = 9;
 }
 
 message RetrieveDataRequestMessage {
