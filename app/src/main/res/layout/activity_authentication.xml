@@ -44,20 +44,4 @@
         android:paddingEnd="40dp"
         android:text="@string/login" />
 
-    <FrameLayout
-        android:id="@+id/clickBlockPanel"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:background="@color/transparentBackgroundColor"
-        android:visibility="gone">
-
-        <ProgressBar
-            android:id="@+id/progressBar"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:indeterminate="true" />
-
-    </FrameLayout>
-
 </RelativeLayout>

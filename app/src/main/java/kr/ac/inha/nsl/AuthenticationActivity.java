@@ -2,9 +2,13 @@ package kr.ac.inha.nsl;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.AppOpsManager;
+import android.app.usage.UsageStats;
+import android.app.usage.UsageStatsManager;
 import android.content.Context;
 import android.content.Intent;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
@@ -12,14 +16,18 @@ import androidx.core.app.ActivityCompat;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.util.Log;
 import android.view.View;
+import android.view.WindowManager;
 import android.widget.Toast;
 
+import java.net.InetAddress;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
+import java.util.List;
 import java.util.Locale;
 
 import inha.nslab.easytrack.ETServiceGrpc;
@@ -54,12 +62,12 @@ public class AuthenticationActivity extends AppCompatActivity {
         }
 
         boolean askForPermission = false;
-        if (Tools.isLocationPermissionDenied(this)) {
+        if (isLocationPermissionDenied(this)) {
             int GPS_PERMISSION_REQUEST_CODE = 1;
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION}, GPS_PERMISSION_REQUEST_CODE);
             askForPermission = true;
         }
-        if (Tools.isUsageAccessDenied(this) && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+        if (isUsageAccessDenied(this) && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
             Intent intent = new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS);
             int USAGE_ACCESS_PERMISSION_REQUEST_CODE = 2;
             startActivityForResult(intent, USAGE_ACCESS_PERMISSION_REQUEST_CODE);
@@ -123,6 +131,8 @@ public class AuthenticationActivity extends AppCompatActivity {
                         } catch (StatusRuntimeException e) {
                             runOnUiThread(() -> Toast.makeText(this, "An error occurred when connecting to the EasyTrack campaign. Please try again later!", Toast.LENGTH_SHORT).show());
                             Log.e(TAG, "onCreate: gRPC server unavailable");
+                        } finally {
+                            channel.shutdown();
                         }
                     }).start();
                 }
@@ -137,6 +147,7 @@ public class AuthenticationActivity extends AppCompatActivity {
                 finish();
         }
     }
+
 
     private void startMainActivity() {
         Intent intent = new Intent(this, MainActivity.class);
@@ -153,6 +164,63 @@ public class AuthenticationActivity extends AppCompatActivity {
             return true;
         }
     }
+
+    static boolean isGPSDeviceEnabled(Context context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.KITKAT)
+            return false;
+
+        try {
+            return Settings.Secure.getInt(context.getContentResolver(), Settings.Secure.LOCATION_MODE) != Settings.Secure.LOCATION_MODE_OFF;
+        } catch (Settings.SettingNotFoundException e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    static boolean isLocationPermissionDenied(Context context) {
+        return ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED || ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED;
+    }
+
+    static boolean isUsageAccessDenied(@NonNull final Context context) {
+        // Usage Stats is theoretically available on API v19+, but official/reliable support starts with API v21.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP_MR1)
+            return true;
+
+        final AppOpsManager appOpsManager = (AppOpsManager) context.getSystemService(Context.APP_OPS_SERVICE);
+
+        if (appOpsManager == null)
+            return true;
+
+        final int mode = appOpsManager.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, android.os.Process.myUid(), context.getPackageName());
+        if (mode != AppOpsManager.MODE_ALLOWED)
+            return true;
+
+        // Verify that access is possible. Some devices "lie" and return MODE_ALLOWED even when it's not.
+        final long now = System.currentTimeMillis();
+        final UsageStatsManager mUsageStatsManager = (UsageStatsManager) context.getSystemService(Context.USAGE_STATS_SERVICE);
+        final List<UsageStats> stats;
+        if (mUsageStatsManager == null)
+            return true;
+        stats = mUsageStatsManager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, now - 1000 * 10, now);
+        return stats == null || stats.isEmpty();
+    }
+
+    static boolean isNetworkAvailable() {
+        try {
+            return !InetAddress.getByName("google.com").toString().equals("");
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    static void disableTouch(Activity activity) {
+        activity.getWindow().setFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE, WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE);
+    }
+
+    static void enableTouch(Activity activity) {
+        activity.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE);
+    }
+
 
     public void loginButtonClick(View view) {
         if (authAppIsNotInstalled())

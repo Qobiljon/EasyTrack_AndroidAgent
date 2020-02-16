@@ -1,6 +1,5 @@
 package kr.ac.inha.nsl;
 
-import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.ComponentName;
 import android.content.Context;
@@ -11,7 +10,6 @@ import android.os.Bundle;
 import android.os.IBinder;
 import android.util.Log;
 import android.view.View;
-import android.widget.Button;
 import android.widget.TextView;
 
 import org.json.JSONException;
@@ -29,48 +27,31 @@ import io.grpc.StatusRuntimeException;
 
 public class MainActivity extends Activity {
     static String TAG = "EasyTrack";
-
-    private int logLinesCount;
-
-    private TextView logEditText;
-    private Button startDataCollectionButton;
-    private Button stopDataCollectionButton;
-    private Button uploadSensorDataButton;
-
-    private Thread submitDataThread;
-    private StoppableRunnable submitDataRunnable;
-    private Thread sampleCounterThread;
-    private StoppableRunnable sampleCounterRunnable;
-
+    private TextView logTextView;
     private ServiceConnection dataCollectorServiceConnection;
     private boolean dataCollectorServiceBound = false;
+    private boolean runThread;
 
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        Log.e(TAG, "MainActivity.onBackPressed()");
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        Tools.init(this);
-        Tools.cleanDb();
-        loadCampaign(getSharedPreferences(getPackageName(), Context.MODE_PRIVATE));
-
-        startDataCollectionButton = findViewById(R.id.startDataCollectionButton);
-        stopDataCollectionButton = findViewById(R.id.stopDataCollectionButton);
-        uploadSensorDataButton = findViewById(R.id.uploadSensorDataButton);
-        logEditText = findViewById(R.id.logTextView);
-
-        logLinesCount = 0;
-        uploadSensorDataButton.setText(getString(R.string.upload_sensor_data, 0));
+        logTextView = findViewById(R.id.logTextView);
 
         SharedPreferences prefs = getSharedPreferences(getPackageName(), Context.MODE_PRIVATE);
         TextView usernameTextView = findViewById(R.id.usernameTextView);
         usernameTextView.setText(String.format("User: %s", prefs.getString("email", null)));
+
+        DbMgr.init(this);
+        loadCampaign(getSharedPreferences(getPackageName(), Context.MODE_PRIVATE));
     }
 
     @Override
     protected void onDestroy() {
-        stopSamplesCounterThread();
+        Log.e(TAG, "MainActivity.onDestroy()");
         if (dataCollectorServiceBound)
             unbindService(dataCollectorServiceConnection);
         super.onDestroy();
@@ -78,12 +59,34 @@ public class MainActivity extends Activity {
 
     @Override
     public void onBackPressed() {
-        Tools.hideApp(this);
+        Log.e(TAG, "MainActivity.onBackPressed()");
+
+        Intent intent = new Intent(Intent.ACTION_MAIN);
+        intent.addCategory(Intent.CATEGORY_HOME);
+        startActivity(intent);
+    }
+
+    @Override
+    protected void onPause() {
+        Log.e(TAG, "MainActivity.onPause()");
+        runThread = false;
+        super.onPause();
     }
 
     @Override
     protected void onResume() {
-        startSamplesCounterThread();
+        Log.e(TAG, "MainActivity.onResume()");
+        runThread = true;
+        new Thread(() -> {
+            while (runThread) {
+                logTextView.setText(getString(R.string.samples_count, DbMgr.countSamples()));
+                try {
+                    Thread.sleep(500);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        }).start();
         super.onResume();
     }
 
@@ -136,6 +139,7 @@ public class MainActivity extends Activity {
         tillCal.setTimeInMillis(endTimestamp);
         log("Campaign configurations loaded");
         log("Name: " + name + "(by " + creatorEmail + ")");
+        log("Campaign notes: " + notes);
         log("From: " + SimpleDateFormat.getDateTimeInstance().format(fromCal.getTime()) + " till: " + SimpleDateFormat.getDateTimeInstance().format(tillCal.getTime()));
         log(participantCount + " participants enrolled to this campaign");
 
@@ -155,12 +159,12 @@ public class MainActivity extends Activity {
             sb.append(_name).append(',');
             int _dataSourceId = elem.getInt("data_source_id");
             editor.putInt(_name, _dataSourceId);
-            if (elem.has("rate")) {
-                int _rate = elem.getInt("rate");
-                editor.putInt(String.format(Locale.getDefault(), "%s_rate", _name), _rate);
+            if (elem.has("delay")) {
+                int _rate = elem.getInt("delay");
+                editor.putInt(String.format(Locale.getDefault(), "%s_delay", _name), _rate);
             } else if (elem.has("json")) {
                 String _json = elem.getString("json");
-                editor.putString(String.format(Locale.getDefault(), "%s_rate", _name), _json);
+                editor.putString(String.format(Locale.getDefault(), "%s_json", _name), _json);
             } else {
                 Log.e(TAG, "setUpCampaignConfigurations: weird data source json case " + elem.toString());
                 throw new JSONException("rate/json must be in the data source json: " + elem.toString());
@@ -173,45 +177,16 @@ public class MainActivity extends Activity {
         editor.apply();
     }
 
-    private void log(final String message) {
-        runOnUiThread(() -> {
+    private void log(String message) {
+        logTextView.setText(message);
+        /*runOnUiThread(() -> {
             if (logLinesCount == 100)
-                logEditText.setText(String.format(Locale.US, "%s%n%s", logEditText.getText().toString().substring(logEditText.getText().toString().indexOf('\n') + 1), message));
+                logTextView.setText(String.format(Locale.US, "%s%n%s", logTextView.getText().toString().substring(logTextView.getText().toString().indexOf('\n') + 1), message));
             else {
-                logEditText.setText(String.format("%s%n%s", logEditText.getText(), message));
+                logTextView.setText(String.format("%s%n%s", logTextView.getText(), message));
                 logLinesCount++;
             }
-        });
-    }
-
-    public void startSamplesCounterThread() {
-        stopSamplesCounterThread();
-
-        sampleCounterThread = new Thread(sampleCounterRunnable = new StoppableRunnable() {
-            @Override
-            public void run() {
-                while (!terminate) {
-                    runOnUiThread(() -> uploadSensorDataButton.setText(getString(R.string.upload_sensor_data, Tools.countSamples())));
-                    try {
-                        Thread.sleep(1000);
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                    }
-                }
-            }
-        });
-        sampleCounterThread.start();
-    }
-
-    public void stopSamplesCounterThread() {
-        if (sampleCounterRunnable != null && !sampleCounterRunnable.terminate) {
-            sampleCounterRunnable.terminate = true;
-            try {
-                sampleCounterThread.join();
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-        }
+        });*/
     }
 
     private void startDataCollectionService() {
@@ -255,40 +230,5 @@ public class MainActivity extends Activity {
         editor.clear();
         editor.apply();
         finish();
-    }
-
-    public void uploadSensorDataClick(View view) {
-        if (submitDataRunnable != null && !submitDataRunnable.terminate) {
-            submitDataRunnable.terminate = true;
-            try {
-                submitDataThread.join();
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-            uploadSensorDataButton.setText(getString(R.string.upload_sensor_data));
-        } else {
-            submitDataThread = new Thread(submitDataRunnable = new StoppableRunnable() {
-                @SuppressLint("SetTextI18n")
-                @Override
-                public void run() {
-                    Tools.submitCollectedData();
-                }
-            });
-            submitDataThread.start();
-            uploadSensorDataButton.setText(getString(R.string.cancel_upload_sensor_data));
-        }
-    }
-
-    public void startDataCollectionClick(View view) {
-        startDataCollectionService();
-        startDataCollectionButton.setClickable(false);
-        stopDataCollectionButton.setClickable(true);
-    }
-
-    public void stopDataCollectionClick(View view) {
-        stopDataCollectionService();
-        startDataCollectionButton.setClickable(true);
-        stopDataCollectionButton.setClickable(false);
-        log("Data collection campaign has terminated");
     }
 }
