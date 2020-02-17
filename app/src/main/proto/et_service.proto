@@ -130,17 +130,20 @@ message RetrieveParticipantStatisticsResponseMessage {
     int64 lastSyncTimestamp = 4;
     int64 lastHeartbeatTimestamp = 5;
     int32 amountOfSubmittedDataSamples = 6;
+    repeated int32 dataSourceId = 7;
+    repeated int32 perDataSourceAmountOfData = 8;
 }
 
-message RetrieveDataRequestMessage {
+message Retrieve100DataRecordsRequestMessage {
     int32 userId = 1;
     string email = 2;
     string targetEmail = 3;
-    int64 fromTimestamp = 4;
-    int64 tillTimestamp = 5;
+    int32 targetCampaignId = 4;
+    int32 targetDataSourceId = 5;
+    int64 fromTimestamp = 6;
 }
 
-message RetrieveDataResponseMessage {
+message Retrieve100DataRecordsResponseMessage {
     bool doneSuccessfully = 1;
     repeated int64 timestamp = 2;
     repeated int32 dataSource = 3;
@@ -176,11 +179,13 @@ message BindDataSourceRequestMessage {
     int32 userId = 1;
     string email = 2;
     string name = 3;
+    string iconName = 4;
 }
 
 message BindDataSourceResponseMessage {
     bool doneSuccessfully = 1;
     int32 dataSourceId = 2;
+    string iconName = 3;
 }
 
 message RetrieveAllDataSourcesRequestMessage {
@@ -218,7 +223,7 @@ service ETService {
     }
     rpc retrieveParticipantStatistics (RetrieveParticipantStatisticsRequestMessage) returns (RetrieveParticipantStatisticsResponseMessage) {
     }
-    rpc retrieveData (RetrieveDataRequestMessage) returns (RetrieveDataResponseMessage) {
+    rpc retrieve100DataRecords (Retrieve100DataRecordsRequestMessage) returns (Retrieve100DataRecordsResponseMessage) {
     }
     rpc retrieveUnreadDirectMessages (RetrieveUnreadDirectMessagesRequestMessage) returns (RetrieveUnreadDirectMessagesResponseMessage) {
     }
@@ -228,7 +233,6 @@ service ETService {
     }
     rpc retrieveAllDataSources (RetrieveAllDataSourcesRequestMessage) returns (RetrieveAllDataSourcesResponseMessage) {
     }
-    // TODO: add an rpc for retrieving data from a specific data-source (i.e., EMA)
 }
 
 /*
