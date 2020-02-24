@@ -12,6 +12,7 @@ import android.util.Log;
 import android.view.View;
 import android.widget.TextView;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -76,7 +77,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         Log.e(TAG, "MainActivity.onResume()");
-        runThread = true;
+        /*runThread = true;
         new Thread(() -> {
             while (runThread) {
                 logTextView.setText(getString(R.string.samples_count, DbMgr.countSamples()));
@@ -86,7 +87,7 @@ public class MainActivity extends Activity {
                     e.printStackTrace();
                 }
             }
-        }).start();
+        }).start();*/
         super.onResume();
     }
 
@@ -151,25 +152,15 @@ public class MainActivity extends Activity {
         editor.putString(String.format(Locale.getDefault(), "%s_configJson", name), configJson);
 
         StringBuilder sb = new StringBuilder();
-        JSONObject root = new JSONObject(configJson);
-        int index = 0;
-        while (root.has(String.valueOf(index))) {
-            JSONObject elem = root.getJSONObject(String.valueOf(index));
-            String _name = elem.getString("name");
+        JSONArray dataSourceArray = new JSONArray(configJson);
+        for (int n = 0; n < dataSourceArray.length(); n++) {
+            JSONObject dataSource = dataSourceArray.getJSONObject(n);
+
+            String _name = dataSource.getString("name");
+            editor.putInt(_name, dataSource.getInt("data_source_id"));
+            editor.putString(String.format(Locale.getDefault(), "config_json_%s", _name), dataSource.getString("config_json"));
+
             sb.append(_name).append(',');
-            int _dataSourceId = elem.getInt("data_source_id");
-            editor.putInt(_name, _dataSourceId);
-            if (elem.has("delay")) {
-                int _rate = elem.getInt("delay");
-                editor.putInt(String.format(Locale.getDefault(), "%s_delay", _name), _rate);
-            } else if (elem.has("json")) {
-                String _json = elem.getString("json");
-                editor.putString(String.format(Locale.getDefault(), "%s_json", _name), _json);
-            } else {
-                Log.e(TAG, "setUpCampaignConfigurations: weird data source json case " + elem.toString());
-                throw new JSONException("rate/json must be in the data source json: " + elem.toString());
-            }
-            index++;
         }
         if (sb.length() > 0)
             sb.replace(sb.length() - 1, sb.length(), "");

@@ -226,7 +226,7 @@ public class AuthenticationActivity extends AppCompatActivity {
         if (authAppIsNotInstalled())
             Toast.makeText(this, "Please install the EasyTrack Authenticator and reopen the application!", Toast.LENGTH_SHORT).show();
         else {
-            Intent launchIntent = getPackageManager().getLaunchIntentForPackage("inha.nslab.easytrack");
+            Intent launchIntent = getPackageManager().getLaunchIntentForPackage("inha.nsl.easytrack");
             if (launchIntent != null) {
                 launchIntent.setFlags(0);
                 startActivityForResult(launchIntent, RC_OPEN_ET_AUTHENTICATOR);

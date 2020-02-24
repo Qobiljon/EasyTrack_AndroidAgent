@@ -21,7 +21,16 @@ class DbMgr {
         saveStringData(sensorId, timestamp, accuracy, sb.toString());
     }
 
-    static synchronized void saveStringData(int dataSourceId, long timestamp, float accuracy, String data) {
+    static void saveMixedData(int sensorId, long timestamp, float accuracy, Object... params) {
+        StringBuilder sb = new StringBuilder();
+        for (Object value : params)
+            sb.append(value).append(',');
+        if (sb.length() > 0)
+            sb.replace(sb.length() - 1, sb.length(), "");
+        saveStringData(sensorId, timestamp, accuracy, sb.toString());
+    }
+
+    static void saveStringData(int dataSourceId, long timestamp, float accuracy, String data) {
         db.execSQL("insert into Data(dataSourceId, timestamp, accuracy, data) values(?, ?, ?, ?);", new Object[]{
                 dataSourceId,
                 timestamp,

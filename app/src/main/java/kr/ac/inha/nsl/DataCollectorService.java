@@ -22,10 +22,10 @@ import android.os.SystemClock;
 import android.util.Log;
 import android.util.SparseIntArray;
 
-import org.jetbrains.annotations.NotNull;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -104,9 +104,16 @@ public class DataCollectorService extends Service {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         Log.e(TAG, "DataCollectorService.onStartCommand()");
-        setUpNewDataSources();
-        setUpDataSubmissionThread();
-        setUpHeartbeatSubmissionThread();
+
+        try {
+            setUpNewDataSources();
+            setUpDataSubmissionThread();
+            setUpHeartbeatSubmissionThread();
+        } catch (JSONException e) {
+            e.printStackTrace();
+            stopSelf();
+        }
+
         // return super.onStartCommand(intent, flags, startId);
         return START_STICKY;
     }
@@ -173,36 +180,36 @@ public class DataCollectorService extends Service {
             sensorManager.unregisterListener(sensorEventListener);
     }
 
-    private void setUpNewDataSources() {
+    private void setUpNewDataSources() throws JSONException {
         SharedPreferences prefs = getSharedPreferences(getPackageName(), Context.MODE_PRIVATE);
         String dataSourceNames = prefs.getString("dataSourceNames", null);
         if (dataSourceNames != null)
             for (String dataSourceName : dataSourceNames.split(",")) {
-                String json = prefs.getString(String.format(Locale.getDefault(), "%s_json", dataSourceName), null);
-                int delay = prefs.getInt(String.format(Locale.getDefault(), "%s_delay", dataSourceName), -1);
-                if (delay != -1)
-                    setUpDataSource(dataSourceName, delay, prefs);
-                else if (json != null)
-                    setUpDataSource(dataSourceName, json, prefs);
+                String json = prefs.getString(String.format(Locale.getDefault(), "config_json_%s", dataSourceName), null);
+                setUpDataSource(dataSourceName, json, prefs);
             }
     }
 
-    private void setUpDataSource(String dataSourceName, @NotNull Integer delay, SharedPreferences prefs) {
+    private void setUpDataSource(String dataSourceName, String configJson, SharedPreferences prefs) throws JSONException {
+        JSONObject json = new JSONObject(configJson);
+
         if (dataSourceNameToSensorMap.containsKey(dataSourceName)) {
             Integer sensorId = dataSourceNameToSensorMap.get(dataSourceName);
             assert sensorId != null;
             Sensor sensor = sensorManager.getDefaultSensor(sensorId);
+            int delay = -1;
+            if (json.has("delay") && Tools.isNumber(json.getString("delay")))
+                delay = Integer.parseInt(json.getString("delay"));
             MySensorEventListener sensorEventListener = new MySensorEventListener(delay);
-            sensorManager.registerListener(sensorEventListener, sensor, SensorManager.SENSOR_DELAY_FASTEST);
+            if (delay == -1)
+                sensorManager.registerListener(sensorEventListener, sensor, SensorManager.SENSOR_DELAY_NORMAL);
+            else
+                sensorManager.registerListener(sensorEventListener, sensor, SensorManager.SENSOR_DELAY_FASTEST);
             sensorEventListeners.add(sensorEventListener);
             sensorToDataSourceIdMap.put(sensorId, prefs.getInt(dataSourceName, -1));
         } else {
             // TODO: GPS, Activity Recognition, App Usage, Survey, etc.
         }
-    }
-
-    private void setUpDataSource(String dataSourceName, String configJson, SharedPreferences prefs) {
-        // TODO: tbd yet
     }
 
     private void setUpDataSubmissionThread() {
@@ -219,8 +226,8 @@ public class DataCollectorService extends Service {
                         ETServiceGrpc.ETServiceBlockingStub stub = ETServiceGrpc.newBlockingStub(channel);
 
                         SharedPreferences prefs = getSharedPreferences(getPackageName(), Context.MODE_PRIVATE);
-                        int userId = prefs.getInt("userId", -1);
-                        String email = prefs.getString("email", null);
+                        int userId = prefs.getInt("userId", 1);
+                        String email = prefs.getString("email", "nslabinha@gmail.com");
 
                         try {
                             do {
@@ -269,10 +276,11 @@ public class DataCollectorService extends Service {
 
                     ETServiceGrpc.ETServiceBlockingStub stub = ETServiceGrpc.newBlockingStub(channel);
                     EtService.SubmitHeartbeatRequestMessage submitHeartbeatRequestMessage = EtService.SubmitHeartbeatRequestMessage.newBuilder()
-                            .setUserId(prefs.getInt("userId", -1))
-                            .setEmail(prefs.getString("email", null))
+                            .setUserId(prefs.getInt("userId", 1))
+                            .setEmail(prefs.getString("email", "nslabinha@gmail.com"))
                             .build();
                     try {
+                        @SuppressWarnings("unused")
                         EtService.DefaultResponseMessage responseMessage = stub.submitHeartbeat(submitHeartbeatRequestMessage);
                     } catch (StatusRuntimeException e) {
                         Log.e(TAG, "DataCollectorService.setUpHeartbeatSubmissionThread() exception: " + e.getMessage());
@@ -298,36 +306,40 @@ public class DataCollectorService extends Service {
     }
 
     private class MySensorEventListener implements SensorEventListener {
-        private boolean captureData;
         private int delay;
         private long nextTimestamp;
+        private boolean defaultDelay;
 
         MySensorEventListener(int delay) {
             this.delay = delay;
-            this.captureData = true;
             this.nextTimestamp = 0;
+
+            if (delay < 1)
+                this.defaultDelay = true;
         }
 
         @Override
         public void onSensorChanged(SensorEvent event) {
-            if (event.timestamp < nextTimestamp)
-                return;
-            nextTimestamp = event.timestamp + this.delay * 1000000;
-
-            StringBuilder sb = new StringBuilder();
-            for (float value : event.values)
-                sb.append(value).append(',');
-            if (sb.length() > 0)
-                sb.replace(sb.length() - 1, sb.length(), "");
-
             int dataSourceId = sensorToDataSourceIdMap.get(event.sensor.getType());
             long timestamp = System.currentTimeMillis() + (event.timestamp - System.nanoTime()) / 1000000L;
-            DbMgr.saveNumericData(dataSourceId, timestamp, event.accuracy, event.values);
+
+            if (this.defaultDelay)
+                handleSensorChangedEvent(dataSourceId, timestamp, event);
+            else {
+                if (event.timestamp < this.nextTimestamp)
+                    return;
+                this.nextTimestamp = event.timestamp + this.delay * 1000000;
+                handleSensorChangedEvent(dataSourceId, timestamp, event);
+            }
         }
 
         @Override
         public void onAccuracyChanged(Sensor sensor, int accuracy) {
 
+        }
+
+        private void handleSensorChangedEvent(int dataSourceId, long timestamp, SensorEvent event) {
+            DbMgr.saveNumericData(dataSourceId, timestamp, event.accuracy, event.values);
         }
     }
 }
