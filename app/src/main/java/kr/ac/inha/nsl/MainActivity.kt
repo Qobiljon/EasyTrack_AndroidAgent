@@ -83,11 +83,8 @@ class MainActivity : Activity() {
                     setUpCampaignConfigurations(
                             retrieveCampaignResponseMessage.name,
                             retrieveCampaignResponseMessage.notes,
-                            retrieveCampaignResponseMessage.creatorEmail,
-                            retrieveCampaignResponseMessage.configJson,
                             retrieveCampaignResponseMessage.startTimestamp,
                             retrieveCampaignResponseMessage.endTimestamp,
-                            retrieveCampaignResponseMessage.participantCount,
                             prefs
                     )
                     stopDataCollectionService()
@@ -105,7 +102,7 @@ class MainActivity : Activity() {
     }
 
     @Throws(JSONException::class)
-    private fun setUpCampaignConfigurations(campaignName: String, campaignNotes: String, campaignCreatorEmail: String, campaignConfigJson: String, campaignStartTimestamp: Long, campaignEndTimestamp: Long, campaignParticipantCount: Int, prefs: SharedPreferences) {
+    private fun setUpCampaignConfigurations(campaignName: String, campaignConfigJson: String, campaignStartTimestamp: Long, campaignEndTimestamp: Long, prefs: SharedPreferences) {
         val fromCal = Calendar.getInstance()
         val tillCal = Calendar.getInstance()
         fromCal.timeInMillis = campaignStartTimestamp
