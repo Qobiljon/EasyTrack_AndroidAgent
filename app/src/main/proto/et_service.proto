@@ -1,5 +1,5 @@
 syntax = "proto3";
-option java_package = "inha.nslab.easytrack";
+option java_package = "inha.nsl.easytrack";
 
 message DefaultResponseMessage {
     bool doneSuccessfully = 1;
@@ -158,6 +158,23 @@ message Retrieve100DataRecordsResponseMessage {
     bool moreDataAvailable = 5;
 }
 
+message RetrieveFilteredDataRecordsRequestMessage{
+    int32 userId = 1;
+    string email = 2;
+    string targetEmail = 3;
+    int32 targetCampaignId = 4;
+    int32 targetDataSourceId = 5;
+    int64 fromTimestamp = 6;
+    int64 tillTimestamp = 7;
+}
+
+message RetrieveFilteredDataRecordsResponseMessage{
+    bool doneSuccessfully = 1;
+    repeated int64 timestamp = 2;
+    repeated int32 dataSource = 3;
+    repeated string value = 4;
+}
+
 message RetrieveUnreadDirectMessagesRequestMessage {
     int32 userId = 1;
     string email = 2;
@@ -235,6 +252,8 @@ service ETService {
     rpc retrieveParticipantStatistics (RetrieveParticipantStatisticsRequestMessage) returns (RetrieveParticipantStatisticsResponseMessage) {
     }
     rpc retrieve100DataRecords (Retrieve100DataRecordsRequestMessage) returns (Retrieve100DataRecordsResponseMessage) {
+    }
+    rpc retrieveFilteredDataRecords (RetrieveFilteredDataRecordsRequestMessage) returns (RetrieveFilteredDataRecordsResponseMessage) {
     }
     rpc retrieveUnreadDirectMessages (RetrieveUnreadDirectMessagesRequestMessage) returns (RetrieveUnreadDirectMessagesResponseMessage) {
     }
