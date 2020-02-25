@@ -156,7 +156,7 @@ class DataCollectorService : Service() {
             }
         }
 
-        otherKnownDataSourceNames = hashSetOf(DataSource.APPLICATION_USAGE.name)
+        otherKnownDataSourceNames = hashSetOf(DataSources.APPLICATION_USAGE.name)
     }
 
     private fun stopDataCollection() {
@@ -194,7 +194,7 @@ class DataCollectorService : Service() {
         } else if (otherKnownDataSourceNames.contains(dataSourceName)) {
             // GPS, Activity Recognition, App Usage, Survey, etc.
             when (dataSourceName) {
-                DataSource.APPLICATION_USAGE.name -> {
+                DataSources.APPLICATION_USAGE.name -> {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP)
                         Thread {
                             var lastCheckTsMs = 0L
@@ -317,7 +317,7 @@ class DataCollectorService : Service() {
         }
     }
 
-    private enum class DataSource(val id: Int) {
+    private enum class DataSources(val id: Int) {
         ANDROID_ACCELEROMETER(3),
         APPLICATION_USAGE(2)
     }
