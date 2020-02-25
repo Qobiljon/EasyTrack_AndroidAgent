@@ -30,6 +30,7 @@ class MainActivity : Activity() {
         usernameTextView.text = String.format("User: %s", prefs.getString("email", null))
 
         DbMgr.init(this)
+        AppUseDb.init(this)
         loadCampaign(getSharedPreferences(packageName, Context.MODE_PRIVATE))
     }
 
@@ -82,7 +83,7 @@ class MainActivity : Activity() {
                 if (retrieveCampaignResponseMessage.doneSuccessfully) {
                     setUpCampaignConfigurations(
                             retrieveCampaignResponseMessage.name,
-                            retrieveCampaignResponseMessage.notes,
+                            retrieveCampaignResponseMessage.configJson,
                             retrieveCampaignResponseMessage.startTimestamp,
                             retrieveCampaignResponseMessage.endTimestamp,
                             prefs

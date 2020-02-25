@@ -16,7 +16,6 @@ import android.provider.Settings
 import android.provider.Settings.SettingNotFoundException
 import android.util.Log
 import android.view.View
-import android.view.WindowManager
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -24,7 +23,6 @@ import inha.nsl.easytrack.ETServiceGrpc
 import inha.nsl.easytrack.EtService.BindUserToCampaignRequestMessage
 import io.grpc.ManagedChannelBuilder
 import io.grpc.StatusRuntimeException
-import java.net.InetAddress
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -129,7 +127,7 @@ class AuthenticationActivity : AppCompatActivity() {
         }
     }
 
-    fun loginButtonClick(view: View?) {
+    fun loginButtonClick(view: View) {
         if (authAppIsNotInstalled()) Toast.makeText(this, "Please install the EasyTrack Authenticator and reopen the application!", Toast.LENGTH_SHORT).show() else {
             val launchIntent = packageManager.getLaunchIntentForPackage("inha.nsl.easytrack")
             if (launchIntent != null) {
@@ -153,8 +151,8 @@ class AuthenticationActivity : AppCompatActivity() {
             }
         }
 
-        fun isLocationPermissionDenied(context: Context?): Boolean {
-            return ActivityCompat.checkSelfPermission(context!!, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED || ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED
+        fun isLocationPermissionDenied(context: Context): Boolean {
+            return ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED || ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED
         }
 
         fun isUsageAccessDenied(context: Context): Boolean {
@@ -165,24 +163,11 @@ class AuthenticationActivity : AppCompatActivity() {
             if (mode != AppOpsManager.MODE_ALLOWED) return true
             // Verify that access is possible. Some devices "lie" and return MODE_ALLOWED even when it's not.
             val now = System.currentTimeMillis()
+            val then = Calendar.getInstance()
+            then.set(Calendar.YEAR, 1971)
             val mUsageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
-            val stats: List<UsageStats> = mUsageStatsManager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, now - 1000 * 10, now)
+            val stats: List<UsageStats> = mUsageStatsManager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, then.timeInMillis, now)
             return stats.isEmpty()
-        }
-
-        val isNetworkAvailable: Boolean
-            get() = try {
-                InetAddress.getByName("google.com").toString() != ""
-            } catch (e: Exception) {
-                false
-            }
-
-        fun disableTouch(activity: Activity) {
-            activity.window.setFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE, WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE)
-        }
-
-        fun enableTouch(activity: Activity) {
-            activity.window.clearFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE)
         }
     }
 }

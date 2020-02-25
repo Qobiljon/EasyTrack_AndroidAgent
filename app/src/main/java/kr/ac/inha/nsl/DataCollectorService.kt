@@ -2,6 +2,7 @@ package kr.ac.inha.nsl
 
 import android.annotation.SuppressLint
 import android.app.*
+import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
@@ -24,20 +25,33 @@ import io.grpc.StatusRuntimeException
 import org.json.JSONException
 import org.json.JSONObject
 import java.util.*
+import kotlin.collections.HashSet
 
 class DataCollectorService : Service() {
     private val mBinder: IBinder = LocalBinder()
-    private var sensorManager: SensorManager? = null
-    private var dataSourceNameToSensorMap: HashMap<String, Int?>? = null
-    private var sensorToDataSourceIdMap: SparseIntArray? = null
-    private var sensorEventListeners: MutableList<MySensorEventListener>? = null
+    private lateinit var sensorManager: SensorManager
+    private lateinit var usageStatsManager: UsageStatsManager
+    private lateinit var dataSourceNameToSensorMap: HashMap<String, Int>
+    private lateinit var otherKnownDataSourceNames: HashSet<String>
+    private lateinit var sensorToDataSourceIdMap: SparseIntArray
+    private lateinit var sensorEventListeners: ArrayList<MySensorEventListener>
     private var runThreads = true
-    override fun onBind(intent: Intent): IBinder? {
+
+
+    override fun onBind(intent: Intent): IBinder {
         return mBinder
     }
 
     override fun onCreate() {
         Log.e(MainActivity.TAG, "DataCollectorService.onCreate()")
+
+        sensorToDataSourceIdMap = SparseIntArray()
+        sensorEventListeners = arrayListOf()
+        sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1)
+            usageStatsManager = getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+        initDataSourceMaps()
+
         val notificationId = 98765
         val notificationIntent = Intent(this, AuthenticationActivity::class.java)
         val pendingIntent = PendingIntent.getActivity(this, 0, notificationIntent, 0)
@@ -65,11 +79,7 @@ class DataCollectorService : Service() {
                     .build()
             startForeground(notificationId, notification)
         }
-        dataSourceNameToSensorMap = HashMap()
-        sensorToDataSourceIdMap = SparseIntArray()
-        sensorEventListeners = ArrayList()
-        sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
-        initDataSourceNameIdMap()
+
         super.onCreate()
     }
 
@@ -104,48 +114,53 @@ class DataCollectorService : Service() {
         // super.onTaskRemoved(rootIntent);
     }
 
-    private fun initDataSourceNameIdMap() {
-        dataSourceNameToSensorMap!!["ANDROID_ACCELEROMETER"] = Sensor.TYPE_ACCELEROMETER
-        dataSourceNameToSensorMap!!["ANDROID_AMBIENT_TEMPERATURE"] = Sensor.TYPE_AMBIENT_TEMPERATURE
-        dataSourceNameToSensorMap!!["ANDROID_GRAVITY"] = Sensor.TYPE_GRAVITY
-        dataSourceNameToSensorMap!!["ANDROID_GYROSCOPE"] = Sensor.TYPE_GYROSCOPE
-        dataSourceNameToSensorMap!!["ANDROID_LIGHT"] = Sensor.TYPE_LIGHT
-        dataSourceNameToSensorMap!!["ANDROID_LINEAR_ACCELERATION"] = Sensor.TYPE_LINEAR_ACCELERATION
-        dataSourceNameToSensorMap!!["ANDROID_MAGNETIC_FIELD"] = Sensor.TYPE_MAGNETIC_FIELD
-        dataSourceNameToSensorMap!!["ANDROID_ORIENTATION"] = Sensor.TYPE_ORIENTATION
-        dataSourceNameToSensorMap!!["ANDROID_PRESSURE"] = Sensor.TYPE_PRESSURE
-        dataSourceNameToSensorMap!!["ANDROID_PROXIMITY"] = Sensor.TYPE_PROXIMITY
-        dataSourceNameToSensorMap!!["ANDROID_RELATIVE_HUMIDITY"] = Sensor.TYPE_RELATIVE_HUMIDITY
-        dataSourceNameToSensorMap!!["ANDROID_ROTATION_VECTOR"] = Sensor.TYPE_ROTATION_VECTOR
-        dataSourceNameToSensorMap!!["ANDROID_TEMPERATURE"] = Sensor.TYPE_TEMPERATURE
+
+    private fun initDataSourceMaps() {
+        dataSourceNameToSensorMap = hashMapOf(
+                "ANDROID_ACCELEROMETER" to Sensor.TYPE_ACCELEROMETER,
+                "ANDROID_AMBIENT_TEMPERATURE" to Sensor.TYPE_AMBIENT_TEMPERATURE,
+                "ANDROID_GRAVITY" to Sensor.TYPE_GRAVITY,
+                "ANDROID_GYROSCOPE" to Sensor.TYPE_GYROSCOPE,
+                "ANDROID_LIGHT" to Sensor.TYPE_LIGHT,
+                "ANDROID_LINEAR_ACCELERATION" to Sensor.TYPE_LINEAR_ACCELERATION,
+                "ANDROID_MAGNETIC_FIELD" to Sensor.TYPE_MAGNETIC_FIELD,
+                "ANDROID_ORIENTATION" to Sensor.TYPE_ORIENTATION,
+                "ANDROID_PRESSURE" to Sensor.TYPE_PRESSURE,
+                "ANDROID_PROXIMITY" to Sensor.TYPE_PROXIMITY,
+                "ANDROID_RELATIVE_HUMIDITY" to Sensor.TYPE_RELATIVE_HUMIDITY,
+                "ANDROID_ROTATION_VECTOR" to Sensor.TYPE_ROTATION_VECTOR,
+                "ANDROID_TEMPERATURE" to Sensor.TYPE_TEMPERATURE
+        )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
-            dataSourceNameToSensorMap!!["ANDROID_GAME_ROTATION_VECTOR"] = Sensor.TYPE_GAME_ROTATION_VECTOR
-            dataSourceNameToSensorMap!!["ANDROID_SIGNIFICANT_MOTION"] = Sensor.TYPE_SIGNIFICANT_MOTION
-            dataSourceNameToSensorMap!!["ANDROID_GYROSCOPE_UNCALIBRATED"] = Sensor.TYPE_GYROSCOPE_UNCALIBRATED
-            dataSourceNameToSensorMap!!["ANDROID_MAGNETIC_FIELD_UNCALIBRATED"] = Sensor.TYPE_MAGNETIC_FIELD_UNCALIBRATED
+            dataSourceNameToSensorMap["ANDROID_GAME_ROTATION_VECTOR"] = Sensor.TYPE_GAME_ROTATION_VECTOR
+            dataSourceNameToSensorMap["ANDROID_SIGNIFICANT_MOTION"] = Sensor.TYPE_SIGNIFICANT_MOTION
+            dataSourceNameToSensorMap["ANDROID_GYROSCOPE_UNCALIBRATED"] = Sensor.TYPE_GYROSCOPE_UNCALIBRATED
+            dataSourceNameToSensorMap["ANDROID_MAGNETIC_FIELD_UNCALIBRATED"] = Sensor.TYPE_MAGNETIC_FIELD_UNCALIBRATED
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-                dataSourceNameToSensorMap!!["ANDROID_STEP_COUNTER"] = Sensor.TYPE_STEP_COUNTER
-                dataSourceNameToSensorMap!!["ANDROID_GEOMAGNETIC_ROTATION_VECTOR"] = Sensor.TYPE_GEOMAGNETIC_ROTATION_VECTOR
-                dataSourceNameToSensorMap!!["ANDROID_STEP_DETECTOR"] = Sensor.TYPE_STEP_DETECTOR
+                dataSourceNameToSensorMap["ANDROID_STEP_COUNTER"] = Sensor.TYPE_STEP_COUNTER
+                dataSourceNameToSensorMap["ANDROID_GEOMAGNETIC_ROTATION_VECTOR"] = Sensor.TYPE_GEOMAGNETIC_ROTATION_VECTOR
+                dataSourceNameToSensorMap["ANDROID_STEP_DETECTOR"] = Sensor.TYPE_STEP_DETECTOR
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT_WATCH) {
-                    dataSourceNameToSensorMap!!["ANDROID_HEART_RATE"] = Sensor.TYPE_HEART_RATE
+                    dataSourceNameToSensorMap["ANDROID_HEART_RATE"] = Sensor.TYPE_HEART_RATE
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                        dataSourceNameToSensorMap!!["ANDROID_MOTION_DETECTION"] = Sensor.TYPE_MOTION_DETECT
-                        dataSourceNameToSensorMap!!["ANDROID_POSE_6DOF"] = Sensor.TYPE_POSE_6DOF
-                        dataSourceNameToSensorMap!!["ANDROID_HEART_BEAT"] = Sensor.TYPE_HEART_BEAT
-                        dataSourceNameToSensorMap!!["ANDROID_STATIONARY_DETECT"] = Sensor.TYPE_STATIONARY_DETECT
+                        dataSourceNameToSensorMap["ANDROID_MOTION_DETECTION"] = Sensor.TYPE_MOTION_DETECT
+                        dataSourceNameToSensorMap["ANDROID_POSE_6DOF"] = Sensor.TYPE_POSE_6DOF
+                        dataSourceNameToSensorMap["ANDROID_HEART_BEAT"] = Sensor.TYPE_HEART_BEAT
+                        dataSourceNameToSensorMap["ANDROID_STATIONARY_DETECT"] = Sensor.TYPE_STATIONARY_DETECT
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                            dataSourceNameToSensorMap!!["ANDROID_LOW_LATENCY_OFFBODY_DETECT"] = Sensor.TYPE_LOW_LATENCY_OFFBODY_DETECT
-                            dataSourceNameToSensorMap!!["ANDROID_ACCELEROMETER_UNCALIBRATED"] = Sensor.TYPE_ACCELEROMETER_UNCALIBRATED
+                            dataSourceNameToSensorMap["ANDROID_LOW_LATENCY_OFFBODY_DETECT"] = Sensor.TYPE_LOW_LATENCY_OFFBODY_DETECT
+                            dataSourceNameToSensorMap["ANDROID_ACCELEROMETER_UNCALIBRATED"] = Sensor.TYPE_ACCELEROMETER_UNCALIBRATED
                         }
                     }
                 }
             }
         }
+
+        otherKnownDataSourceNames = hashSetOf(DataSource.APPLICATION_USAGE.name)
     }
 
     private fun stopDataCollection() {
-        for (sensorEventListener in sensorEventListeners!!) sensorManager!!.unregisterListener(sensorEventListener)
+        for (sensorEventListener in sensorEventListeners) sensorManager.unregisterListener(sensorEventListener)
     }
 
     @Throws(JSONException::class)
@@ -153,35 +168,58 @@ class DataCollectorService : Service() {
         val prefs = getSharedPreferences(packageName, Context.MODE_PRIVATE)
         val dataSourceNames = prefs.getString("dataSourceNames", null)
         if (dataSourceNames != null) for (dataSourceName in dataSourceNames.split(",").toTypedArray()) {
-            val json = prefs.getString(String.format(Locale.getDefault(), "config_json_%s", dataSourceName), "{}")
+            val json = prefs.getString(String.format(Locale.getDefault(), "config_json_%s", dataSourceName), null) ?: "{}"
             setUpDataSource(dataSourceName, json, prefs)
         }
     }
 
     @Throws(JSONException::class)
-    private fun setUpDataSource(dataSourceName: String, configJson: String?, prefs: SharedPreferences) {
-        if (configJson == null)
-            throw JSONException("ConfigJson is null")
+    private fun setUpDataSource(dataSourceName: String, configJson: String, prefs: SharedPreferences) {
         val json = JSONObject(configJson)
-        if (dataSourceNameToSensorMap!!.containsKey(dataSourceName)) {
-            val sensorId = dataSourceNameToSensorMap!![dataSourceName]!!
-            val sensor = sensorManager!!.getDefaultSensor(sensorId)
+        if (dataSourceNameToSensorMap.containsKey(dataSourceName)) {
+            // Device sensors (i.e., Accelerometer, Light, etc.)
+            val sensorId = dataSourceNameToSensorMap[dataSourceName] ?: -1
+            assert(sensorId != -1)
+            val sensor = sensorManager.getDefaultSensor(sensorId)
             var delay = -1
-            if (json.has("delay") && Tools.isNumber(json.getString("delay"))) delay = json.getString("delay").toInt()
+            if (json.has("delay") && Tools.isNumber(json.getString("delay")))
+                delay = json.getString("delay").toInt()
             val sensorEventListener = MySensorEventListener(delay)
-            if (delay == -1) sensorManager!!.registerListener(sensorEventListener, sensor, SensorManager.SENSOR_DELAY_NORMAL) else sensorManager!!.registerListener(sensorEventListener, sensor, SensorManager.SENSOR_DELAY_FASTEST)
-            sensorEventListeners!!.add(sensorEventListener)
-            sensorToDataSourceIdMap!!.put(sensorId, prefs.getInt(dataSourceName, -1))
-        } else {
-            // TODO: GPS, Activity Recognition, App Usage, Survey, etc.
-            val a = 4;
+            if (delay == -1)
+                sensorManager.registerListener(sensorEventListener, sensor, SensorManager.SENSOR_DELAY_NORMAL)
+            else
+                sensorManager.registerListener(sensorEventListener, sensor, SensorManager.SENSOR_DELAY_FASTEST)
+            sensorEventListeners.add(sensorEventListener)
+            sensorToDataSourceIdMap.put(sensorId, prefs.getInt(dataSourceName, -1))
+        } else if (otherKnownDataSourceNames.contains(dataSourceName)) {
+            // GPS, Activity Recognition, App Usage, Survey, etc.
+            when (dataSourceName) {
+                DataSource.APPLICATION_USAGE.name -> {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP)
+                        Thread {
+                            var lastCheckTsMs = 0L
+                            while (runThreads) {
+                                try {
+                                    Thread.sleep(1000)
+                                } catch (e: InterruptedException) {
+                                    e.printStackTrace()
+                                }
+                                val usageStatsMap = usageStatsManager.queryUsageStats(UsageStatsManager.INTERVAL_BEST, lastCheckTsMs, System.currentTimeMillis())
+                                for (usage in usageStatsMap)
+                                    AppUseDb.saveAppUsageStat(usage.packageName, usage.lastTimeUsed, usage.totalTimeInForeground / 1000)
+                                lastCheckTsMs = System.currentTimeMillis()
+                            }
+                        }.start()
+                }
+                else -> Log.e(MainActivity.TAG, "Unrecognized data source: $dataSourceName")
+            }
         }
     }
 
     private fun setUpDataSubmissionThread() {
-        object : Thread() {
-            override fun run() {
-                while (runThreads) {
+        Thread {
+            while (runThreads) {
+                if (Tools.isNetworkAvailable) {
                     val cursor = DbMgr.sensorData
                     if (cursor.moveToFirst()) {
                         val channel = ManagedChannelBuilder.forAddress(
@@ -210,11 +248,12 @@ class DataCollectorService : Service() {
                         }
                     }
                     cursor.close()
-                    /*try {
-                        Thread.sleep(1000);
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                    }*/
+                }
+
+                try {
+                    Thread.sleep(1000)
+                } catch (e: InterruptedException) {
+                    e.printStackTrace()
                 }
             }
         }.start()
@@ -249,16 +288,17 @@ class DataCollectorService : Service() {
         }.start()
     }
 
-    private inner class LocalBinder : Binder() { //MF_DataCollectorService getService() {
-//    return MF_DataCollectorService.this;
-//}
+
+    private inner class LocalBinder : Binder() {
+        val getService: DataCollectorService
+            get() = this@DataCollectorService
     }
 
     private inner class MySensorEventListener internal constructor(private val delay: Int) : SensorEventListener {
         private var nextTimestamp: Long = 0
         private var defaultDelay = false
         override fun onSensorChanged(event: SensorEvent) {
-            val dataSourceId = sensorToDataSourceIdMap!![event.sensor.type]
+            val dataSourceId = sensorToDataSourceIdMap[event.sensor.type]
             val timestamp = System.currentTimeMillis() + (event.timestamp - System.nanoTime()) / 1000000L
             if (defaultDelay) handleSensorChangedEvent(dataSourceId, timestamp, event) else {
                 if (event.timestamp < nextTimestamp) return
@@ -275,5 +315,10 @@ class DataCollectorService : Service() {
         init {
             if (delay < 1) defaultDelay = true
         }
+    }
+
+    private enum class DataSource(val id: Int) {
+        ANDROID_ACCELEROMETER(3),
+        APPLICATION_USAGE(2)
     }
 }
