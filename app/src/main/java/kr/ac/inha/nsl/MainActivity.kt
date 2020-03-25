@@ -1,7 +1,9 @@
 package kr.ac.inha.nsl
 
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.*
+import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
 import android.util.Log
@@ -27,7 +29,8 @@ class MainActivity : Activity() {
         setContentView(R.layout.activity_main)
 
         val prefs = getSharedPreferences(packageName, Context.MODE_PRIVATE)
-        usernameTextView.text = String.format("User: %s", prefs.getString("email", null))
+        @SuppressLint("SetTextI18n")
+        usernameTextView.text = "User: ${prefs.getString("email", null)}"
 
         DbMgr.init(this)
         AppUseDb.init(this)
@@ -108,17 +111,17 @@ class MainActivity : Activity() {
         val tillCal = Calendar.getInstance()
         fromCal.timeInMillis = campaignStartTimestamp
         tillCal.timeInMillis = campaignEndTimestamp
-        val oldConfigJson = prefs.getString(String.format(Locale.getDefault(), "%s_configJson", campaignName), null)
+        val oldConfigJson = prefs.getString("${campaignName}_configJson", null)
         if (campaignConfigJson == oldConfigJson) return
         val editor = prefs.edit()
-        editor.putString(String.format(Locale.getDefault(), "%s_configJson", campaignName), campaignConfigJson)
+        editor.putString("${campaignName}_configJson", campaignConfigJson)
         val sb = StringBuilder()
         val dataSourceArray = JSONArray(campaignConfigJson)
         for (n in 0 until dataSourceArray.length()) {
             val dataSource = dataSourceArray.getJSONObject(n)
             val dataSourceName = dataSource.getString("name")
             editor.putInt(dataSourceName, dataSource.getInt("data_source_id"))
-            editor.putString(String.format(Locale.getDefault(), "config_json_%s", dataSourceName), dataSource.getString("config_json"))
+            editor.putString("config_json_$dataSourceName", dataSource.getString("config_json"))
             sb.append(dataSourceName).append(',')
         }
         if (sb.isNotEmpty()) sb.replace(sb.length - 1, sb.length, "")
@@ -126,9 +129,14 @@ class MainActivity : Activity() {
         editor.apply()
     }
 
-    private fun startDataCollectionService() { // Start service
+    private fun startDataCollectionService() {
+        // Start service
         val intent = Intent(this, DataCollectorService::class.java)
-        startService(intent)
+        stopService(intent)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+            startForegroundService(intent)
+        else
+            startService(intent)
         // Bind service
         dataCollectorServiceConnection = object : ServiceConnection {
             override fun onServiceConnected(name: ComponentName, service: IBinder) {

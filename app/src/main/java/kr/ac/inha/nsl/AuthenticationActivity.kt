@@ -86,14 +86,7 @@ class AuthenticationActivity : AppCompatActivity() {
                             } else runOnUiThread {
                                 val cal = Calendar.getInstance()
                                 cal.timeInMillis = responseMessage.campaignStartTimestamp
-                                Toast.makeText(
-                                        this, String.format(
-                                        Locale.getDefault(),
-                                        "EasyTrack campaign hasn't started. Campaign start time is: %s",
-                                        SimpleDateFormat.getDateTimeInstance().format(cal.time)
-                                ),
-                                        Toast.LENGTH_LONG
-                                ).show()
+                                Toast.makeText(this, "EasyTrack campaign hasn't started. Campaign start time is: ${SimpleDateFormat.getDateTimeInstance().format(cal.time)}", Toast.LENGTH_LONG).show()
                             }
                         } catch (e: StatusRuntimeException) {
                             runOnUiThread { Toast.makeText(this, "An error occurred when connecting to the EasyTrack campaign. Please try again later!", Toast.LENGTH_SHORT).show() }

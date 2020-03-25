@@ -106,7 +106,16 @@ message SubmitHeartbeatRequestMessage {
 message SubmitDirectMessageRequestMessage {
     int32 userId = 1;
     string email = 2;
-    string targetEmail = 3;
+    int32 campaignId = 3;
+    string targetEmail = 4;
+    string subject = 5;
+    string content = 6;
+}
+
+message SubmitNotificationRequestMessage {
+    int32 userId = 1;
+    string email = 2;
+    int32 campaignId = 3;
     string subject = 4;
     string content = 5;
 }
@@ -158,7 +167,7 @@ message Retrieve100DataRecordsResponseMessage {
     bool moreDataAvailable = 5;
 }
 
-message RetrieveFilteredDataRecordsRequestMessage{
+message RetrieveFilteredDataRecordsRequestMessage {
     int32 userId = 1;
     string email = 2;
     string targetEmail = 3;
@@ -168,7 +177,7 @@ message RetrieveFilteredDataRecordsRequestMessage{
     int64 tillTimestamp = 7;
 }
 
-message RetrieveFilteredDataRecordsResponseMessage{
+message RetrieveFilteredDataRecordsResponseMessage {
     bool doneSuccessfully = 1;
     repeated int64 timestamp = 2;
     repeated int32 dataSource = 3;
@@ -227,42 +236,25 @@ message RetrieveAllDataSourcesResponseMessage {
 }
 
 service ETService {
-    rpc loginWithGoogleId (LoginWithGoogleIdTokenRequestMessage) returns (LoginResponseMessage) {
-    }
-    rpc bindUserToCampaign (BindUserToCampaignRequestMessage) returns (BindUserToCampaignResponseMessage) {
-    }
-    rpc dashboardLoginWithEmail (DashboardLoginWithEmailRequestMessage) returns (LoginResponseMessage) {
-    }
-    rpc registerCampaign (RegisterCampaignRequestMessage) returns (RegisterCampaignResponseMessage) {
-    }
-    rpc deleteCampaign (DeleteCampaignRequestMessage) returns (DefaultResponseMessage) {
-    }
-    rpc retrieveCampaigns (RetrieveCampaignsRequestMessage) returns (RetrieveCampaignsResponseMessage) {
-    }
-    rpc retrieveCampaign (RetrieveCampaignRequestMessage) returns (RetrieveCampaignResponseMessage) {
-    }
-    rpc submitDataRecord (SubmitDataRecordRequestMessage) returns (DefaultResponseMessage) {
-    }
-    rpc submitHeartbeat (SubmitHeartbeatRequestMessage) returns (DefaultResponseMessage) {
-    }
-    rpc submitDirectMessage (SubmitDirectMessageRequestMessage) returns (DefaultResponseMessage) {
-    }
-    rpc retrieveParticipants (RetrieveParticipantsRequestMessage) returns (RetrieveParticipantsResponseMessage) {
-    }
-    rpc retrieveParticipantStatistics (RetrieveParticipantStatisticsRequestMessage) returns (RetrieveParticipantStatisticsResponseMessage) {
-    }
-    rpc retrieve100DataRecords (Retrieve100DataRecordsRequestMessage) returns (Retrieve100DataRecordsResponseMessage) {
-    }
-    rpc retrieveFilteredDataRecords (RetrieveFilteredDataRecordsRequestMessage) returns (RetrieveFilteredDataRecordsResponseMessage) {
-    }
-    rpc retrieveUnreadDirectMessages (RetrieveUnreadDirectMessagesRequestMessage) returns (RetrieveUnreadDirectMessagesResponseMessage) {
-    }
-    rpc retrieveUnreadNotifications (RetrieveUnreadNotificationsRequestMessage) returns (RetrieveUnreadNotificationsResponseMessage) {
-    }
-    rpc bindDataSource (BindDataSourceRequestMessage) returns (BindDataSourceResponseMessage) {
-    }
-    rpc retrieveAllDataSources (RetrieveAllDataSourcesRequestMessage) returns (RetrieveAllDataSourcesResponseMessage) {
-    }
+    rpc loginWithGoogleId (LoginWithGoogleIdTokenRequestMessage) returns (LoginResponseMessage);
+    rpc bindUserToCampaign (BindUserToCampaignRequestMessage) returns (BindUserToCampaignResponseMessage);
+    rpc dashboardLoginWithEmail (DashboardLoginWithEmailRequestMessage) returns (LoginResponseMessage);
+    rpc registerCampaign (RegisterCampaignRequestMessage) returns (RegisterCampaignResponseMessage);
+    rpc deleteCampaign (DeleteCampaignRequestMessage) returns (DefaultResponseMessage);
+    rpc retrieveCampaigns (RetrieveCampaignsRequestMessage) returns (RetrieveCampaignsResponseMessage);
+    rpc retrieveCampaign (RetrieveCampaignRequestMessage) returns (RetrieveCampaignResponseMessage);
+    rpc submitDataRecord (SubmitDataRecordRequestMessage) returns (DefaultResponseMessage);
+    rpc submitHeartbeat (SubmitHeartbeatRequestMessage) returns (DefaultResponseMessage);
+    rpc submitDirectMessage (SubmitDirectMessageRequestMessage) returns (DefaultResponseMessage);
+    rpc submitNotification (SubmitNotificationRequestMessage) returns (DefaultResponseMessage);
+    rpc retrieveParticipants (RetrieveParticipantsRequestMessage) returns (RetrieveParticipantsResponseMessage);
+    rpc retrieveParticipantStatistics (RetrieveParticipantStatisticsRequestMessage) returns (RetrieveParticipantStatisticsResponseMessage);
+    rpc retrieve100DataRecords (Retrieve100DataRecordsRequestMessage) returns (Retrieve100DataRecordsResponseMessage);
+    rpc retrieveFilteredDataRecords (RetrieveFilteredDataRecordsRequestMessage) returns (RetrieveFilteredDataRecordsResponseMessage);
+    rpc retrieveUnreadDirectMessages (RetrieveUnreadDirectMessagesRequestMessage) returns (RetrieveUnreadDirectMessagesResponseMessage);
+    rpc retrieveUnreadNotifications (RetrieveUnreadNotificationsRequestMessage) returns (RetrieveUnreadNotificationsResponseMessage);
+    rpc bindDataSource (BindDataSourceRequestMessage) returns (BindDataSourceResponseMessage);
+    rpc retrieveAllDataSources (RetrieveAllDataSourcesRequestMessage) returns (RetrieveAllDataSourcesResponseMessage);
 }
 
 /*

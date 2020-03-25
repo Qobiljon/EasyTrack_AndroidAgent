@@ -119,7 +119,6 @@ internal object AppUseDb {
                     totalTimeInForeground
             ))
         else {
-            // TODO: the interesting part
             val startTimestamp = endTimestamp - (totalTimeInForeground - lastRecord.totalTimeInForeground)
             if (startTimestamp != endTimestamp) {
                 if (startTimestamp == lastRecord.endTimestamp)
@@ -159,11 +158,11 @@ internal object AppUseDb {
 
     @Synchronized
     fun cleanDb() {
-        db.execSQL("delete from Data;")
+        db.execSQL("delete from AppUse;")
     }
 
     fun countSamples(): Int {
-        val cursor = db.rawQuery("select count(*) from Data;", arrayOfNulls(0))
+        val cursor = db.rawQuery("select count(*) from AppUse;", arrayOfNulls(0))
         var result = 0
         if (cursor.moveToFirst()) result = cursor.getInt(0)
         cursor.close()
@@ -171,10 +170,10 @@ internal object AppUseDb {
     }
 
     val sensorData: Cursor
-        get() = db.rawQuery("select * from Data;", arrayOfNulls(0))
+        get() = db.rawQuery("select * from AppUse;", arrayOfNulls(0))
 
     fun deleteRecord(id: Int) {
-        db.execSQL("delete from Data where id=?;", arrayOf<Any>(id))
+        db.execSQL("delete from AppUse where id=?;", arrayOf<Any>(id))
     }
 
     class AppUsageRecord(var id: Int, var packageName: String, var startTimestamp: Long, var endTimestamp: Long, var totalTimeInForeground: Long)
