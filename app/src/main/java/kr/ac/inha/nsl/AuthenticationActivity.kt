@@ -20,7 +20,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import inha.nsl.easytrack.ETServiceGrpc
-import inha.nsl.easytrack.EtService.BindUserToCampaignRequestMessage
+import inha.nsl.easytrack.EtService
 import io.grpc.ManagedChannelBuilder
 import io.grpc.StatusRuntimeException
 import java.text.SimpleDateFormat
@@ -63,18 +63,18 @@ class AuthenticationActivity : AppCompatActivity() {
                     val fullName = data.getStringExtra("fullName")
                     val email = data.getStringExtra("email")
                     val userId = data.getIntExtra("userId", -1)
-                    Thread(Runnable {
+                    Thread {
                         val channel = ManagedChannelBuilder.forAddress(
                                 getString(R.string.grpc_host), getString(R.string.grpc_port).toInt()).usePlaintext().build()
                         val stub = ETServiceGrpc.newBlockingStub(channel)
-                        val requestMessage = BindUserToCampaignRequestMessage.newBuilder()
+                        val requestMessage = EtService.BindUserToCampaign.Request.newBuilder()
                                 .setUserId(userId)
                                 .setEmail(email)
                                 .setCampaignId(getString(R.string.easytrack_campaign_id).toInt())
                                 .build()
                         try {
                             val responseMessage = stub.bindUserToCampaign(requestMessage)
-                            if (responseMessage.doneSuccessfully) runOnUiThread {
+                            if (responseMessage.success) runOnUiThread {
                                 Toast.makeText(this, "Successfully authorized and connected to the EasyTrack campaign!", Toast.LENGTH_SHORT).show()
                                 val prefs = getSharedPreferences(packageName, Context.MODE_PRIVATE)
                                 val editor = prefs.edit()
@@ -94,7 +94,7 @@ class AuthenticationActivity : AppCompatActivity() {
                         } finally {
                             channel.shutdown()
                         }
-                    }).start()
+                    }.start()
                 }
             } else if (resultCode == Activity.RESULT_FIRST_USER) Toast.makeText(this, "Canceled", Toast.LENGTH_SHORT).show() else if (resultCode == Activity.RESULT_CANCELED) Toast.makeText(this, "Technical issue. Please check your internet connectivity and try again!", Toast.LENGTH_SHORT).show()
         } else if (requestCode == RC_OPEN_MAIN_ACTIVITY) {

@@ -19,9 +19,9 @@ import android.util.Log
 import android.util.SparseIntArray
 import com.google.android.gms.location.ActivityRecognition
 import com.google.android.gms.location.ActivityRecognitionClient
+import com.google.protobuf.ByteString
 import inha.nsl.easytrack.ETServiceGrpc
-import inha.nsl.easytrack.EtService.SubmitDataRecordRequestMessage
-import inha.nsl.easytrack.EtService.SubmitHeartbeatRequestMessage
+import inha.nsl.easytrack.EtService
 import io.grpc.ManagedChannelBuilder
 import io.grpc.StatusRuntimeException
 import org.json.JSONException
@@ -183,7 +183,8 @@ class DataCollectorService : Service() {
         if (dataSourceNameToSensorIdMap.containsKey(dataSourceName)) {
             // case: device sensors (i.e., Accelerometer, Light, etc.)
             val sensorId = dataSourceNameToSensorIdMap[dataSourceName] ?: -1
-            assert(sensorId != -1)
+            if (BuildConfig.DEBUG && sensorId == -1)
+                error("Assertion failed")
             val sensor = sensorManager.getDefaultSensor(sensorId)
             var delay = -1
             if (json.has("delay_ms") && Tools.isNumber(json.getString("delay_ms")))
@@ -238,7 +239,7 @@ class DataCollectorService : Service() {
                     if (json.has("delay_ms") && Tools.isNumber(json.getString("delay_ms")))
                         delay = 2000L.coerceAtLeast(json.getString("delay_ms").toLong())
                     Thread {
-                        var lastCheckTsMs = 0L.coerceAtLeast(prefs.getLong("lastHOCTsMs", -1))
+                        var lastCheckTsMs: Long
                         while (runThreads) {
                             try {
                                 Thread.sleep(delay)
@@ -275,15 +276,16 @@ class DataCollectorService : Service() {
                         val email = prefs.getString("email", "nslabinha@gmail.com")
                         try {
                             do {
-                                val submitDataRecordRequestMessage = SubmitDataRecordRequestMessage.newBuilder()
+                                val submitDataRecordRequestMessage = EtService.SubmitDataRecord.Request.newBuilder()
                                         .setUserId(userId)
                                         .setEmail(email)
+                                        .setCampaignId(getString(R.string.easytrack_campaign_id).toInt())
                                         .setDataSource(cursor.getInt(1))
                                         .setTimestamp(cursor.getLong(2))
-                                        .setValues(cursor.getString(4))
+                                        .setValue(ByteString.copyFrom(cursor.getString(4), Charsets.UTF_8))
                                         .build()
                                 val responseMessage = stub.submitDataRecord(submitDataRecordRequestMessage)
-                                if (responseMessage.doneSuccessfully) DbMgr.deleteRecord(cursor.getInt(0))
+                                if (responseMessage.success) DbMgr.deleteRecord(cursor.getInt(0))
                             } while (cursor.moveToNext())
                         } catch (e: StatusRuntimeException) {
                             Log.e(MainActivity.TAG, "DataCollectorService.setUpDataSubmissionThread() exception: " + e.message)
@@ -312,7 +314,7 @@ class DataCollectorService : Service() {
                         getString(R.string.grpc_host), getString(R.string.grpc_port).toInt()).usePlaintext().build()
                 val prefs = getSharedPreferences(packageName, Context.MODE_PRIVATE)
                 val stub = ETServiceGrpc.newBlockingStub(channel)
-                val submitHeartbeatRequestMessage = SubmitHeartbeatRequestMessage.newBuilder()
+                val submitHeartbeatRequestMessage = EtService.SubmitHeartbeat.Request.newBuilder()
                         .setUserId(prefs.getInt("userId", 1))
                         .setEmail(prefs.getString("email", "nslabinha@gmail.com"))
                         .build()
@@ -340,7 +342,7 @@ class DataCollectorService : Service() {
             get() = this@DataCollectorService
     }
 
-    private inner class MySensorEventListener internal constructor(private val delay: Int) : SensorEventListener {
+    private inner class MySensorEventListener(private val delay: Int) : SensorEventListener {
         private var nextTimestamp: Long = 0
         private var defaultDelay = false
         override fun onSensorChanged(event: SensorEvent) {

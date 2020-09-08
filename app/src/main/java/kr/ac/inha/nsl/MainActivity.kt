@@ -10,7 +10,7 @@ import android.util.Log
 import android.view.View
 import android.widget.Toast
 import inha.nsl.easytrack.ETServiceGrpc
-import inha.nsl.easytrack.EtService.RetrieveCampaignRequestMessage
+import inha.nsl.easytrack.EtService
 import io.grpc.ManagedChannelBuilder
 import io.grpc.StatusRuntimeException
 import kotlinx.android.synthetic.main.activity_main.*
@@ -72,18 +72,18 @@ class MainActivity : Activity() {
     }
 
     private fun loadCampaign(prefs: SharedPreferences) {
-        Thread(Runnable {
+        Thread {
             val channel = ManagedChannelBuilder.forAddress(
                     getString(R.string.grpc_host), getString(R.string.grpc_port).toInt()).usePlaintext().build()
             try {
                 val stub = ETServiceGrpc.newBlockingStub(channel)
-                val retrieveCampaignRequestMessage = RetrieveCampaignRequestMessage.newBuilder()
+                val retrieveCampaignRequestMessage = EtService.RetrieveCampaign.Request.newBuilder()
                         .setUserId(prefs.getInt("userId", -1))
                         .setEmail(prefs.getString("email", null))
                         .setCampaignId(getString(R.string.easytrack_campaign_id).toInt())
                         .build()
                 val retrieveCampaignResponseMessage = stub.retrieveCampaign(retrieveCampaignRequestMessage)
-                if (retrieveCampaignResponseMessage.doneSuccessfully) {
+                if (retrieveCampaignResponseMessage.success) {
                     setUpCampaignConfigurations(
                             retrieveCampaignResponseMessage.name,
                             retrieveCampaignResponseMessage.configJson,
@@ -102,7 +102,7 @@ class MainActivity : Activity() {
             } finally {
                 channel.shutdown()
             }
-        }).start()
+        }.start()
     }
 
     @Throws(JSONException::class)
