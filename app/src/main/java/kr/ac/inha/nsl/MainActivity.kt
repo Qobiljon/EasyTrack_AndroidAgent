@@ -78,8 +78,7 @@ class MainActivity : Activity() {
             try {
                 val stub = ETServiceGrpc.newBlockingStub(channel)
                 val retrieveCampaignRequestMessage = EtService.RetrieveCampaign.Request.newBuilder()
-                        .setUserId(prefs.getInt("userId", -1))
-                        .setEmail(prefs.getString("email", null))
+                        .setSessionKey(prefs.getString("sessionKey", null))
                         .setCampaignId(getString(R.string.easytrack_campaign_id).toInt())
                         .build()
                 val retrieveCampaignResponseMessage = stub.retrieveCampaign(retrieveCampaignRequestMessage)

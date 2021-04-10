@@ -14,7 +14,6 @@ import android.hardware.SensorManager
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
-import android.os.SystemClock
 import android.util.Log
 import android.util.SparseIntArray
 import com.google.android.gms.location.ActivityRecognition
@@ -272,13 +271,11 @@ class DataCollectorService : Service() {
                                 getString(R.string.grpc_host), getString(R.string.grpc_port).toInt()).usePlaintext().build()
                         val stub = ETServiceGrpc.newBlockingStub(channel)
                         val prefs = getSharedPreferences(packageName, Context.MODE_PRIVATE)
-                        val userId = prefs.getInt("userId", 1)
-                        val email = prefs.getString("email", "nslabinha@gmail.com")
+                        val sessionKey = prefs.getString("sessionKey", null)
                         try {
                             do {
                                 val submitDataRecordRequestMessage = EtService.SubmitDataRecord.Request.newBuilder()
-                                        .setUserId(userId)
-                                        .setEmail(email)
+                                        .setSessionKey(sessionKey)
                                         .setCampaignId(getString(R.string.easytrack_campaign_id).toInt())
                                         .setDataSource(cursor.getInt(1))
                                         .setTimestamp(cursor.getLong(2))
@@ -315,8 +312,7 @@ class DataCollectorService : Service() {
                 val prefs = getSharedPreferences(packageName, Context.MODE_PRIVATE)
                 val stub = ETServiceGrpc.newBlockingStub(channel)
                 val submitHeartbeatRequestMessage = EtService.SubmitHeartbeat.Request.newBuilder()
-                        .setUserId(prefs.getInt("userId", 1))
-                        .setEmail(prefs.getString("email", "nslabinha@gmail.com"))
+                        .setSessionKey(prefs.getString("sessionKey", null))
                         .build()
                 try {
                     stub.submitHeartbeat(submitHeartbeatRequestMessage)

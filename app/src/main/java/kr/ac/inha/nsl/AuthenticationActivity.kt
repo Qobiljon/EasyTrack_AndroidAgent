@@ -60,16 +60,14 @@ class AuthenticationActivity : AppCompatActivity() {
         if (requestCode == RC_OPEN_ET_AUTHENTICATOR) {
             if (resultCode == Activity.RESULT_OK) {
                 if (data != null) {
-                    val fullName = data.getStringExtra("fullName")
+                    val name = data.getStringExtra("name")
                     val email = data.getStringExtra("email")
-                    val userId = data.getIntExtra("userId", -1)
+                    val sessionKey = data.getStringExtra("sessionKey")
                     Thread {
-                        val channel = ManagedChannelBuilder.forAddress(
-                                getString(R.string.grpc_host), getString(R.string.grpc_port).toInt()).usePlaintext().build()
+                        val channel = ManagedChannelBuilder.forAddress(getString(R.string.grpc_host), getString(R.string.grpc_port).toInt()).usePlaintext().build()
                         val stub = ETServiceGrpc.newBlockingStub(channel)
                         val requestMessage = EtService.BindUserToCampaign.Request.newBuilder()
-                                .setUserId(userId)
-                                .setEmail(email)
+                                .setSessionKey(sessionKey)
                                 .setCampaignId(getString(R.string.easytrack_campaign_id).toInt())
                                 .build()
                         try {
@@ -78,9 +76,9 @@ class AuthenticationActivity : AppCompatActivity() {
                                 Toast.makeText(this, "Successfully authorized and connected to the EasyTrack campaign!", Toast.LENGTH_SHORT).show()
                                 val prefs = getSharedPreferences(packageName, Context.MODE_PRIVATE)
                                 val editor = prefs.edit()
-                                editor.putString("fullName", fullName)
+                                editor.putString("name", name)
                                 editor.putString("email", email)
-                                editor.putInt("userId", userId)
+                                editor.putString("sessionKey", sessionKey)
                                 editor.apply()
                                 startMainActivity()
                             } else runOnUiThread {
