@@ -267,14 +267,15 @@ class DataCollectorService : Service() {
                 if (Tools.isNetworkAvailable) {
                     val cursor = DbMgr.sensorData
                     if (cursor.moveToFirst()) {
-                        val channel = ManagedChannelBuilder.forAddress(
-                                getString(R.string.grpc_host), getString(R.string.grpc_port).toInt()).usePlaintext().build()
+                        val channel = ManagedChannelBuilder.forAddress(getString(R.string.grpc_host), getString(R.string.grpc_port).toInt()).usePlaintext().build()
                         val stub = ETServiceGrpc.newBlockingStub(channel)
                         val prefs = getSharedPreferences(packageName, Context.MODE_PRIVATE)
+                        val userId = prefs.getInt("userId", -1)
                         val sessionKey = prefs.getString("sessionKey", null)
                         try {
                             do {
                                 val submitDataRecordRequestMessage = EtService.SubmitDataRecord.Request.newBuilder()
+                                        .setUserId(userId)
                                         .setSessionKey(sessionKey)
                                         .setCampaignId(getString(R.string.easytrack_campaign_id).toInt())
                                         .setDataSource(cursor.getInt(1))
@@ -307,11 +308,11 @@ class DataCollectorService : Service() {
     private fun setUpHeartbeatSubmissionThread() {
         Thread {
             while (runThreads) {
-                val channel = ManagedChannelBuilder.forAddress(
-                        getString(R.string.grpc_host), getString(R.string.grpc_port).toInt()).usePlaintext().build()
+                val channel = ManagedChannelBuilder.forAddress(getString(R.string.grpc_host), getString(R.string.grpc_port).toInt()).usePlaintext().build()
                 val prefs = getSharedPreferences(packageName, Context.MODE_PRIVATE)
                 val stub = ETServiceGrpc.newBlockingStub(channel)
                 val submitHeartbeatRequestMessage = EtService.SubmitHeartbeat.Request.newBuilder()
+                        .setUserId(prefs.getInt("userId", -1))
                         .setSessionKey(prefs.getString("sessionKey", null))
                         .build()
                 try {

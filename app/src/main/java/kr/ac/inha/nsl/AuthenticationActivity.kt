@@ -62,11 +62,13 @@ class AuthenticationActivity : AppCompatActivity() {
                 if (data != null) {
                     val name = data.getStringExtra("name")
                     val email = data.getStringExtra("email")
+                    val userId = data.getIntExtra("userId", -1)
                     val sessionKey = data.getStringExtra("sessionKey")
                     Thread {
                         val channel = ManagedChannelBuilder.forAddress(getString(R.string.grpc_host), getString(R.string.grpc_port).toInt()).usePlaintext().build()
                         val stub = ETServiceGrpc.newBlockingStub(channel)
                         val requestMessage = EtService.BindUserToCampaign.Request.newBuilder()
+                                .setUserId(userId)
                                 .setSessionKey(sessionKey)
                                 .setCampaignId(getString(R.string.easytrack_campaign_id).toInt())
                                 .build()
@@ -78,6 +80,7 @@ class AuthenticationActivity : AppCompatActivity() {
                                 val editor = prefs.edit()
                                 editor.putString("name", name)
                                 editor.putString("email", email)
+                                editor.putInt("userId", userId)
                                 editor.putString("sessionKey", sessionKey)
                                 editor.apply()
                                 startMainActivity()

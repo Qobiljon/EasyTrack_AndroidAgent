@@ -9,13 +9,15 @@ message LoginWithGoogle{
   }
   message Response{
     bool success = 1;
-    string sessionKey = 2;
+    int32 userId = 2;
+    string sessionKey = 3;
   }
 }
 message BindUserToCampaign {
   message Request{
-    string sessionKey = 1;
-    int32 campaignId = 2;
+    int32 userId = 1;
+    string sessionKey = 2;
+    int32 campaignId = 3;
   }
   message Response{
     bool success = 1;
@@ -25,8 +27,9 @@ message BindUserToCampaign {
 }
 message RetrieveParticipants {
   message Request{
-    string sessionKey = 1;
-    int32 campaignId = 2;
+    int32 userId = 1;
+    string sessionKey = 2;
+    int32 campaignId = 3;
   }
   message Response{
     bool success = 1;
@@ -37,9 +40,10 @@ message RetrieveParticipants {
 }
 message RetrieveParticipantStats {
   message Request{
-    string sessionKey = 1;
-    string targetEmail = 2;
-    int32 targetCampaignId = 3;
+    int32 userId = 1;
+    string sessionKey = 2;
+    string targetEmail = 3;
+    int32 targetCampaignId = 4;
   }
   message Response{
     bool success = 1;
@@ -57,13 +61,14 @@ message RetrieveParticipantStats {
 // campaign management module
 message RegisterCampaign {
   message Request{
-    string sessionKey = 1;
-    int32 campaignId = 2;
-    string name = 3;
-    string notes = 4;
-    string configJson = 5;
-    int64 startTimestamp = 6;
-    int64 endTimestamp = 7;
+    int32 userId = 1;
+    string sessionKey = 2;
+    int32 campaignId = 3;
+    string name = 4;
+    string notes = 5;
+    string configJson = 6;
+    int64 startTimestamp = 7;
+    int64 endTimestamp = 8;
   }
   message Response{
     bool success = 1;
@@ -72,8 +77,9 @@ message RegisterCampaign {
 }
 message DeleteCampaign {
   message Request{
-    string sessionKey = 1;
-    int32 campaignId = 2;
+    int32 userId = 1;
+    string sessionKey = 2;
+    int32 campaignId = 3;
   }
   message Response{
     bool success = 1;
@@ -81,8 +87,9 @@ message DeleteCampaign {
 }
 message RetrieveCampaigns {
   message Request{
-    string sessionKey = 1;
-    bool myCampaignsOnly = 2;
+    int32 userId = 1;
+    string sessionKey = 2;
+    bool myCampaignsOnly = 3;
   }
   message Response{
     bool success = 1;
@@ -98,8 +105,9 @@ message RetrieveCampaigns {
 }
 message RetrieveCampaign {
   message Request{
-    string sessionKey = 1;
-    int32 campaignId = 2;
+    int32 userId = 1;
+    string sessionKey = 2;
+    int32 campaignId = 3;
   }
   message Response{
     bool success = 1;
@@ -116,9 +124,10 @@ message RetrieveCampaign {
 // data source management module
 message BindDataSource {
   message Request{
-    string sessionKey = 1;
-    string name = 2;
-    string iconName = 3;
+    int32 userId = 1;
+    string sessionKey = 2;
+    string name = 3;
+    string iconName = 4;
   }
   message Response{
     bool success = 1;
@@ -128,7 +137,8 @@ message BindDataSource {
 }
 message RetrieveDataSources {
   message Request{
-    string sessionKey = 1;
+    int32 userId = 1;
+    string sessionKey = 2;
   }
   message Response{
     bool success = 1;
@@ -142,12 +152,13 @@ message RetrieveDataSources {
 // data management module
 message SubmitDataRecord {
   message Request{
-    string sessionKey = 1;
-    int32 campaignId = 2;
-    int64 timestamp = 3;
-    int32 dataSource = 4;
-    float accuracy = 5;
-    bytes value = 6;
+    int32 userId = 1;
+    string sessionKey = 2;
+    int32 campaignId = 3;
+    int64 timestamp = 4;
+    int32 dataSource = 5;
+    float accuracy = 6;
+    bytes value = 7;
   }
   message Response{
     bool success = 1;
@@ -155,12 +166,13 @@ message SubmitDataRecord {
 }
 message SubmitDataRecords {
   message Request{
-    string sessionKey = 1;
-    int32 campaignId = 2;
-    repeated int64 timestamp = 3;
-    repeated int32 dataSource = 4;
-    repeated float accuracy = 5;
-    repeated bytes value = 6;
+    int32 userId = 1;
+    string sessionKey = 2;
+    int32 campaignId = 3;
+    repeated int64 timestamp = 4;
+    repeated int32 dataSource = 5;
+    repeated float accuracy = 6;
+    repeated bytes value = 7;
   }
   message Response{
     bool success = 1;
@@ -168,12 +180,13 @@ message SubmitDataRecords {
 }
 message RetrieveKNextDataRecords {
   message Request{
-    string sessionKey = 1;
-    string targetEmail = 2;
-    int32 targetCampaignId = 3;
-    int32 targetDataSourceId = 4;
-    int32 k = 5;
-    int32 fromTimestamp = 6;
+    int32 userId = 1;
+    string sessionKey = 2;
+    string targetEmail = 3;
+    int32 targetCampaignId = 4;
+    int32 targetDataSourceId = 5;
+    int32 k = 6;
+    int32 fromTimestamp = 7;
   }
   message Response{
     bool success = 1;
@@ -183,13 +196,14 @@ message RetrieveKNextDataRecords {
 }
 message RetrieveFilteredDataRecords{
   message Request{
-    string sessionKey = 1;
-    string targetEmail = 2;
-    int32 targetCampaignId = 3;
-    int32 targetDataSourceId = 4;
-    int64 fromTimestamp = 5;
-    int64 tillTimestamp = 6;
-    bool simplifyIfTooLarge = 7;
+    int32 userId = 1;
+    string sessionKey = 2;
+    string targetEmail = 3;
+    int32 targetCampaignId = 4;
+    int32 targetDataSourceId = 5;
+    int64 fromTimestamp = 6;
+    int64 tillTimestamp = 7;
+    bool simplifyIfTooLarge = 8;
   }
   message Response{
     bool success = 1;
@@ -200,9 +214,10 @@ message RetrieveFilteredDataRecords{
 }
 message DownloadDumpfile{
   message Request{
-    string sessionKey = 1;
-    int32 campaignId = 2;
-    string targetEmail = 3;
+    int32 userId = 1;
+    string sessionKey = 2;
+    int32 campaignId = 3;
+    string targetEmail = 4;
   }
   message Response{
     bool success = 1;
@@ -213,8 +228,9 @@ message DownloadDumpfile{
 // statistics module
 message SubmitHeartbeat {
   message Request{
-    string sessionKey = 1;
-    int32 campaignId = 2;
+    int32 userId = 1;
+    string sessionKey = 2;
+    int32 campaignId = 3;
   }
   message Response{
     bool success = 1;
@@ -224,10 +240,11 @@ message SubmitHeartbeat {
 // communication management module
 message SubmitDirectMessage {
   message Request{
-    string sessionKey = 1;
-    string targetEmail = 2;
-    string subject = 3;
-    string content = 4;
+    int32 userId = 1;
+    string sessionKey = 2;
+    string targetEmail = 3;
+    string subject = 4;
+    string content = 5;
   }
   message Response{
     bool success = 1;
@@ -236,7 +253,8 @@ message SubmitDirectMessage {
 }
 message RetrieveUnreadDirectMessages {
   message Request{
-    string sessionKey = 1;
+    int32 userId = 1;
+    string sessionKey = 2;
   }
   message Response{
     bool success = 1;
@@ -249,11 +267,12 @@ message RetrieveUnreadDirectMessages {
 }
 message SubmitNotification {
   message Request{
-    string sessionKey = 1;
-    int32 campaignId = 2;
-    int64 timestamp = 3;
-    string subject = 4;
-    string content = 5;
+    int32 userId = 1;
+    string sessionKey = 2;
+    int32 campaignId = 3;
+    int64 timestamp = 4;
+    string subject = 5;
+    string content = 6;
   }
   message Response{
     bool success = 1;
@@ -262,7 +281,8 @@ message SubmitNotification {
 }
 message RetrieveUnreadNotifications {
   message Request{
-    string sessionKey = 1;
+    int32 userId = 1;
+    string sessionKey = 2;
   }
   message Response{
     bool success = 1;

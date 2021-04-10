@@ -73,11 +73,11 @@ class MainActivity : Activity() {
 
     private fun loadCampaign(prefs: SharedPreferences) {
         Thread {
-            val channel = ManagedChannelBuilder.forAddress(
-                    getString(R.string.grpc_host), getString(R.string.grpc_port).toInt()).usePlaintext().build()
+            val channel = ManagedChannelBuilder.forAddress(getString(R.string.grpc_host), getString(R.string.grpc_port).toInt()).usePlaintext().build()
             try {
                 val stub = ETServiceGrpc.newBlockingStub(channel)
                 val retrieveCampaignRequestMessage = EtService.RetrieveCampaign.Request.newBuilder()
+                        .setUserId(prefs.getInt("userId", -1))
                         .setSessionKey(prefs.getString("sessionKey", null))
                         .setCampaignId(getString(R.string.easytrack_campaign_id).toInt())
                         .build()
