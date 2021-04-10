@@ -9,6 +9,7 @@ import android.os.IBinder
 import android.util.Log
 import android.view.View
 import android.widget.Toast
+import com.google.protobuf.ByteString
 import inha.nsl.easytrack.ETServiceGrpc
 import inha.nsl.easytrack.EtService
 import io.grpc.ManagedChannelBuilder
